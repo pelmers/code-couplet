@@ -1,0 +1,8 @@
+{
+  "name": "comment-dentist",
+  "version": "1.0.0",
+  "description": "Sync comments with code",
+  "main": "index.js",
+  "author": "Peter Elmers <peter.elmers@yahoo.com>",
+  "license": "MIT"
+}
