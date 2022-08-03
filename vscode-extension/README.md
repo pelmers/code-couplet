@@ -1,1 +1,1 @@
-# Comment Dentist VS Code Extension
+# Comment Thing VS Code Extension
