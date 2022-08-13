@@ -1,13 +1,42 @@
-# TODO: new name for this crap.
-# Guardian of Comments? GoC
-# Keeper of Comments? like rice coffeehouse
+# Code Couplet
 
-# Comment Dentist (typescript module)
-# C3 Code Comment Consistency (but then what domain name could I pick???)
+### (working name)
 
-Node module and on-disk file schema for maintaining relationships between comments and the code it refers to.
-Expected to be used with comments mostly, but it can also represent code-to-code.
-But isn't that the typechecker's job usually?
+**A typechecker for your comments.**
+
+<!-- if I keep "couplet" this intro could be a little poem -->
+
+Code Couplet is a simple program which checks that your code and comments are in sync.
+It solves the age-old problem of outdated comments no longer matching code that has been changed.
+Just like a typechecker, this tool gives you confidence that your comments mean what you expect.
+
+## Usage
+
+Code Couplet itself is a Node program which reads a stored description of code-comment relationships and verifies the codebase against these relationships.
+These are stored in a `.code-couplet` folder in the root of your repository, and you should commit them into version control.
+
+There are several ways to interact with this program.
+
+1. Editor plugins (e.g. VS Code)
+2. Git pre-commit hook
+3. Continuous integration job, such as Github Actions
+
+### VS Code
+
+The VS Code extension for Code Couplet provides a quick way to link comments with code.
+TODO: screencast
+
+It also verifies existing connections and provides diagnostic errors.
+In case lines are moved, the diagnostic errors include
+TODO: screencast
+
+### Git pre-commit hook
+
+TODO!
+
+### CI Job
+
+TODO!
 
 ## Schema
 
@@ -15,45 +44,3 @@ Per managed file, a new file called {filename}.comment-map,
 in a folder called .comment-maps at the repo root.
 Schema is defined in Typescript and encoded/decoded using io-ts.
 See `src/schema.ts`.
-
-## Updating
-
-- Try to automatically update stored config to match changes
-- Uses the output of git diff
-- Updating comments/code:
-- Check in the file if the comment/code value is still there.
-- Offer to update range for this value.
-- Else, check if range is still in bounds.
-- Offer to upate value to this range.
-
-## Validation
-
-- Validate schema against the actual comments
-- Prints places where the comments no longer match the real code
-
-### Git Hook
-
-- You can run this script as a git hook to make sure your commits are always clean!
-- Usage:
-
-### Github Action
-
-- See the workflow file included in this repo
-- TODO: https://docs.github.com/en/actions/learn-github-actions/finding-and-customizing-actions
-
-### TODO: new idea, ML based thing
-Could be set up as a service
-Train model that for given code context, predicts whether the code and comment match
-ideally something self-supervised, or maybe mechanical turk powered labeling
-
-model idea:
-inputs: code/comment pairs (nearby? limited length?)
-output: relevance score
-then at commit time, if comment/paired code changes and the predicted relevance decreases then give alert
-
-e.g. use some trusted / well commented repo
-different model for each programming language? or can one generalize? maybe a data augmentation idea?
-
-another question: how to tokenize comments/code for the model?
-probably run it through a parser first? or just regex line prefix based?
-some examples, https://huggingface.co/docs/transformers/preprocessing

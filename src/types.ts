@@ -1,32 +1,28 @@
-type Position = {
+// TODO: Should the encoded position ignore leading whitespace?
+export type Position = {
   line: number;
   char: number;
 };
 
-type Range = {
+export type Range = {
   start: Position;
   end: Position;
 };
 
-type CommentCommon = {
+export type CommentV1 = {
   commentValue: string;
   commentRange: Range;
   codeRange: Range;
   codeValue: string;
-}
-
-type ManualComment = {
-  type: "manual";
-} & CommentCommon;
-
-type AutomaticComment = {
-  type: "automatic";
-  relevance: number;
-} & CommentCommon;
-
-type Comment = ManualComment | AutomaticComment
-
-type File = {
-  version: number;
-  comments: Comment[];
 };
+
+export type FileV1 = {
+  version: 1;
+  comments: CommentV1[];
+};
+
+// When there are more versions, this should be a union of all of them
+export type File = FileV1;
+
+// This type should match the latest version
+export type CurrentFile = FileV1;

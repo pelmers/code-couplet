@@ -1,5 +1,5 @@
 {
-  "name": "comment-dentist",
+  "name": "code-couplet",
   "version": "1.0.0",
   "description": "Sync comments with code",
   "main": "dist/index.js",
@@ -7,14 +7,20 @@
   "author": "Peter Elmers <peter.elmers@yahoo.com>",
   "license": "MIT",
   "dependencies": {
+    "fp-ts": "^2.12.2",
     "io-ts": "^2.2.16"
   },
   "devDependencies": {
+    "@types/jest": "^28.1.6",
+    "@types/node": "^18.7.2",
+    "jest": "^28.1.3",
     "prettier": "^2.6.2",
+    "ts-jest": "^28.0.7",
     "typescript": "^4.6.4"
   },
   "scripts": {
     "build": "webpack --config webpack.config.js",
-    "format": "node_modules/.bin/prettier --ignore-path .gitignore --write '.' '!**/third-party/**/*'"
+    "build-extension": "cd vscode-extension && npm run build",
+    "format": "node_modules/.bin/prettier --ignore-path .gitignore --write '.'"
   }
 }
