@@ -36,5 +36,6 @@ export function validate(
   contents: string,
   schema: CurrentFile
 ): ValidationError[] {
+  // TODO: remember to ignore leading whitespace
   return [];
 }
