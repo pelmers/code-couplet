@@ -3,7 +3,8 @@
 "use strict";
 
 const path = require("path");
-const { SourceMapDevToolPlugin } = require("webpack");
+const TsconfigPathsPlugin = require("tsconfig-paths-webpack-plugin");
+const transform = require("typescript-json/lib/transform").default;
 
 //@ts-check
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
@@ -27,6 +28,8 @@ const extensionConfig = {
   resolve: {
     // support reading TypeScript and JavaScript files, 📖 -> https://github.com/TypeStrong/ts-loader
     extensions: [".ts", ".js"],
+    // @ts-ignore
+    plugins: [new TsconfigPathsPlugin({})],
   },
   module: {
     rules: [
@@ -36,14 +39,20 @@ const extensionConfig = {
         use: [
           {
             loader: "ts-loader",
+            options: {
+              getCustomTransformers: (program) => ({
+                before: [transform(program, { numeric: true })],
+              }),
+            },
           },
         ],
       },
     ],
   },
-  devtool: "nosources-source-map",
+  devtool: "cheap-module-source-map",
   infrastructureLogging: {
     level: "log", // enables logging required for problem matchers
   },
 };
-module.exports = [extensionConfig];
+
+module.exports = extensionConfig;

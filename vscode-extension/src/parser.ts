@@ -19,8 +19,12 @@ function escapeRegExp(input: string): string {
 export async function findSingleLineComments(
   editor: vscode.TextEditor,
   config: LanguageConfiguration,
-  range?: vscode.Range
+  extraParams: {
+    range?: vscode.Range;
+    throwOnEmpty?: boolean;
+  } = {}
 ): Promise<vscode.Range[]> {
+  const { range, throwOnEmpty } = extraParams;
   const commentConfig = await config.GetCommentConfiguration(
     editor.document.languageId
   );
@@ -45,6 +49,11 @@ export async function findSingleLineComments(
       offset + match.index + match[0].length
     );
     matches.push(new vscode.Range(startPos, endPos));
+  }
+  if (throwOnEmpty && matches.length === 0) {
+    throw new Error(
+      `no single-line comments found, was looking for ${lineComment} in lines`
+    );
   }
   return matches;
 }

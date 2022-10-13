@@ -1,4 +1,3 @@
-// TODO: Should the encoded char start at 0 or at the first non whitespace character?
 export type Position = {
   line: number;
   char: number;
@@ -31,3 +30,23 @@ export type File = FileV1;
 
 // * This type should match the latest version
 export type CurrentFile = FileV1;
+
+export function emptySchema(): CurrentFile {
+  return {
+    version: 1,
+    comments: [],
+    configuration: {},
+  };
+}
+
+// Borrowed from comments of https://github.com/microsoft/TypeScript/issues/1897
+type AnyJson = boolean | number | string | null | JsonArray | JsonMap;
+interface JsonMap {
+  [key: string]: AnyJson;
+}
+interface JsonArray extends Array<AnyJson> {}
+
+// This bit statically asserts that the type is a JSON object
+if (1 + 1 === 3) {
+  (<T extends AnyJson>(schema: T): T => schema)(emptySchema());
+}
