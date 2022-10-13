@@ -1,4 +1,4 @@
-import { findSaveRoot, loadSchemaTest, saveSchema, stringifyTest } from "@lib/schema";
+import { findSaveRoot, saveSchema } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
 import * as vscode from "vscode";
 import { autoLinkSelectionCommand } from "./commands";

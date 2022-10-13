@@ -1,6 +1,7 @@
-import { File, CurrentFile, emptySchema } from "./types";
+import { File, CurrentFile, TFile } from "./types";
 import { URI, Utils } from "vscode-uri";
 import { exists, FileType, getFs } from "./fsShim";
+import { isRight } from "fp-ts/lib/Either";
 
 const fs = getFs();
 
@@ -89,8 +90,11 @@ export async function findSaveRoot(
  * If the sourcePath is not located under saveRoot, then throw an error.
  * Input saveRoot is the path to the workspace/repository root, computed by findSaveRoot.
  */
-export function buildSchemaPath(saveRoot: URI, sourcePath: URI): URI {
-  const transformedSourcePath = sourcePath.path.replace(
+export function buildSchemaPath(saveRoot: URI, sourceURI: URI): URI {
+  let sourcePath = sourceURI.path;
+  // Remove the first part of sourcePath which overlaps saveRoot
+  sourcePath = sourcePath.slice(saveRoot.path.length);
+  const transformedSourcePath = sourcePath.replace(
     /\//g,
     PATH_TRANSFORM_FRAGMENT
   );
@@ -105,11 +109,8 @@ export async function saveSchema(
 ): Promise<void> {
   await fs.writeFile(
     buildSchemaPath(saveRoot, sourceFilePath),
-    Buffer.from(JSON.stringify(schema))
+    Buffer.from(JSON.stringify(schema, null, 2))
   );
-}
-
-function validateSchema(schema: unknown): asserts schema is File {
 }
 
 // Load the existing comment schema for the given file. If not found, then null.
@@ -117,17 +118,21 @@ function validateSchema(schema: unknown): asserts schema is File {
 export async function loadSchema(
   saveRoot: URI,
   sourceFilePath: URI
-): Promise<File | null> {
+): Promise<TFile | null> {
   const schemaPath = buildSchemaPath(saveRoot, sourceFilePath);
   if (!(await exists(schemaPath))) {
     return null;
   }
 
-  const contents = JSON.parse((await fs.readFile(schemaPath)).toString())
-  validateSchema(contents)
-  return contents;
+  const contents = (await fs.readFile(schemaPath)).toString();
+  // Parse contents with io-ts for File decoder
+  const validation = File.decode(JSON.parse(contents));
+  if (!isRight(validation)) {
+    throw new Error(`Could not decode schema at ${sourceFilePath.path}`);
+  }
+  return validation.right;
 }
 
-export function migrateToLatestFormat(file: File): CurrentFile {
+export function migrateToLatestFormat(file: TFile): CurrentFile {
   return file;
 }

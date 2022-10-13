@@ -53,7 +53,8 @@ async function commitNewRangeToMap(
   const commentConfig = await config.GetCommentConfiguration(
     editor.document.languageId
   );
-  currentSchema.configuration.lineComment = commentConfig?.lineComment;
+  const lineComment = commentConfig?.lineComment;
+  currentSchema.configuration.lineComment = lineComment || null;
 
   const commentValue = editor.document.getText(commentRange);
   const codeValue = editor.document.getText(codeRange);

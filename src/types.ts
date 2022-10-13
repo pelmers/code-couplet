@@ -1,41 +1,53 @@
-export type Position = {
-  line: number;
-  char: number;
-};
+import * as t from "io-ts";
 
-export type Range = {
-  start: Position;
-  end: Position;
-};
+function optional<X extends t.Mixed>(typ: X) {
+  return t.union([t.null, typ]);
+}
 
-export type CommentV1 = {
-  commentValue: string;
-  commentRange: Range;
-  codeRange: Range;
-  codeValue: string;
-};
+const Position = t.type({
+  line: t.number,
+  char: t.number,
+});
+export type Position = t.TypeOf<typeof Position>;
 
-export type ConfigurationV1 = {
-  lineComment?: string;
-};
+const Range = t.type({
+  start: Position,
+  end: Position,
+});
+export type Range = t.TypeOf<typeof Range>;
 
-export type FileV1 = {
-  version: 1;
-  comments: CommentV1[];
-  configuration: ConfigurationV1;
-};
+const CommentV1 = t.type({
+  commentValue: t.string,
+  commentRange: Range,
+  codeRange: Range,
+  codeValue: t.string,
+});
+export type CommentV1 = t.TypeOf<typeof CommentV1>;
+
+const ConfigurationV1 = t.type({
+  lineComment: optional(t.string),
+});
+export type ConfigurationV1 = t.TypeOf<typeof ConfigurationV1>;
+
+const FileV1 = t.type({
+  version: t.literal(1),
+  configuration: ConfigurationV1,
+  comments: t.array(CommentV1),
+});
+export type FileV1 = t.TypeOf<typeof FileV1>;
 
 // * When there are more versions, this should be a union of all of them
-export type File = FileV1;
+export const File = FileV1;
+export type TFile = t.TypeOf<typeof File>;
 
 // * This type should match the latest version
-export type CurrentFile = FileV1;
+export type CurrentFile = t.TypeOf<typeof FileV1>;
 
 export function emptySchema(): CurrentFile {
   return {
     version: 1,
     comments: [],
-    configuration: {},
+    configuration: { lineComment: null },
   };
 }
 
