@@ -101,16 +101,15 @@ export function buildSchemaPath(saveRoot: URI, sourceURI: URI): URI {
   return Utils.joinPath(saveRoot, KNOWN_FOLDER_NAME, transformedSourcePath);
 }
 
-// Save the comment schema to its map file.
+// Save the comment schema to its map file, returns the URI of the saved path.
 export async function saveSchema(
   saveRoot: URI,
   sourceFilePath: URI,
   schema: CurrentFile
-): Promise<void> {
-  await fs.writeFile(
-    buildSchemaPath(saveRoot, sourceFilePath),
-    Buffer.from(JSON.stringify(schema, null, 2))
-  );
+): Promise<URI> {
+  const savePath = buildSchemaPath(saveRoot, sourceFilePath);
+  await fs.writeFile(savePath, Buffer.from(JSON.stringify(schema, null, 2)));
+  return savePath;
 }
 
 // Load the existing comment schema for the given file. If not found, then null.

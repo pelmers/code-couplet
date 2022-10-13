@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { LanguageConfiguration } from "./languageConfiguration";
 import { findSingleLineComments } from "./parser";
 
+import { PROJECT_NAME } from "@lib/constants";
 import {
   findSaveRoot,
   loadSchema,
@@ -28,6 +29,27 @@ function rangeToSerialize(range: vscode.Range): SchemaRange {
   };
 }
 
+function schemaRangeToVscode(range: SchemaRange): vscode.Range {
+  return new vscode.Range(
+    pos(range.start.line, range.start.char),
+    pos(range.end.line, range.end.char)
+  );
+}
+
+async function findRootAndSchema(editor: vscode.TextEditor) {
+  const { workspaceFolders } = vscode.workspace;
+  const saveRoot = await findSaveRoot(
+    editor.document.uri,
+    (workspaceFolders || []).map((ws) => ws.uri)
+  );
+  const currentSchema = await loadSchema(saveRoot, editor.document.uri);
+  if (currentSchema == null) {
+    return { schema: emptySchema(), saveRoot };
+  } else {
+    return { schema: migrateToLatestFormat(currentSchema), saveRoot };
+  }
+}
+
 /**
  * Commit the linked sections to the map file by loading the existing one and then saving it
  */
@@ -36,37 +58,53 @@ async function commitNewRangeToMap(
   config: LanguageConfiguration,
   commentRange: vscode.Range,
   codeRange: vscode.Range
-): Promise<void> {
+): Promise<{ status: "added" | "updated"; saveRoot: vscode.Uri }> {
   // remark: technically there's a race condition if two of these commands run at once on the same source file
   // TODO: fix that race condition haha
-  const { workspaceFolders } = vscode.workspace;
-  const saveRoot = await findSaveRoot(
-    editor.document.uri,
-    (workspaceFolders || []).map((ws) => ws.uri)
-  );
-  let currentSchema = await loadSchema(saveRoot, editor.document.uri);
-  if (currentSchema == null) {
-    currentSchema = emptySchema();
-  } else {
-    currentSchema = migrateToLatestFormat(currentSchema);
-  }
+  const { schema, saveRoot } = await findRootAndSchema(editor);
   const commentConfig = await config.GetCommentConfiguration(
     editor.document.languageId
   );
   const lineComment = commentConfig?.lineComment;
-  currentSchema.configuration.lineComment = lineComment || null;
+  schema.configuration.lineComment = lineComment || null;
 
   const commentValue = editor.document.getText(commentRange);
   const codeValue = editor.document.getText(codeRange);
 
   // TODO: what if there is already a link on this line? I think we should overwrite it?
-  currentSchema.comments.push({
+  schema.comments.push({
     commentValue,
     commentRange: rangeToSerialize(commentRange),
     codeValue,
     codeRange: rangeToSerialize(codeRange),
   });
-  await saveSchema(saveRoot, editor.document.uri, currentSchema);
+  await saveSchema(saveRoot, editor.document.uri, schema);
+  return { saveRoot, status: "added" };
+}
+
+/**
+ * Remove the linked sections from the map file by loading the existing one and then saving it
+ */
+async function removeRangeFromMap(
+  editor: vscode.TextEditor,
+  commentRange: vscode.Range,
+  codeRange: vscode.Range
+): Promise<{ status: "removed" | "not found"; saveRoot: vscode.Uri }> {
+  const { schema, saveRoot } = await findRootAndSchema(editor);
+  // Find the codeRange and commentRange in the existing comments, and remove them
+  for (const comment of schema.comments) {
+    const existingCommentRange = schemaRangeToVscode(comment.commentRange);
+    const existingCodeRange = schemaRangeToVscode(comment.codeRange);
+    if (
+      commentRange.isEqual(existingCommentRange) &&
+      codeRange.isEqual(existingCodeRange)
+    ) {
+      schema.comments.splice(schema.comments.indexOf(comment), 1);
+      await saveSchema(saveRoot, editor.document.uri, schema);
+      return { saveRoot, status: "removed" };
+    }
+  }
+  return { saveRoot, status: "not found" };
 }
 
 /**
@@ -150,11 +188,40 @@ export async function autoLinkSelectionCommand(config: LanguageConfiguration) {
   if (!codeRange) {
     throw new Error("no code block found in selection");
   }
+  let result;
   try {
-    await commitNewRangeToMap(editor, config, commentRange, codeRange);
+    result = await commitNewRangeToMap(editor, config, commentRange, codeRange);
   } catch (e) {
     throw new Error(`could not save comment link: ${getErrorMessage(e)}`);
   }
-  // TODO: confirmation info message??? maybe with an "undo" message?
-  vscode.window.showInformationMessage("I did the thing");
+
+  const showSuccessMessage = vscode.workspace
+    .getConfiguration(PROJECT_NAME)
+    .get<boolean>("showLinkingSuccessMessage");
+
+  if (result && showSuccessMessage) {
+    const undo = "Undo";
+    const neverAgain = "Don't show again";
+    const choice = await vscode.window.showInformationMessage(
+      "Linked comment with code",
+      { detail: `Location: ${result.saveRoot.fsPath}` },
+      undo,
+      neverAgain
+    );
+    if (choice === undo) {
+      const result = await removeRangeFromMap(editor, commentRange, codeRange);
+      if (result.status == "not found") {
+        throw new Error(`could not undo comment link: link not found`);
+      } else {
+        vscode.window.showInformationMessage("Unlinked comment with code", {
+          detail: `Location: ${result.saveRoot.fsPath}`,
+        });
+      }
+    } else if (choice === neverAgain) {
+      // TODO: add the config to the extension package json
+      await vscode.workspace
+        .getConfiguration(PROJECT_NAME)
+        .update("showLinkingSuccessMessage", false);
+    }
+  }
 }

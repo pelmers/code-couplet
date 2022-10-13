@@ -1,7 +1,7 @@
 {
   "name": "code-couplet-vscode",
-  "displayName": "code-couplet-vscode",
-  "description": "",
+  "displayName": "Code Couplet",
+  "description": "Typechecker for your comments. Guarantee your comments are up to date with your code.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.70.0"
@@ -21,7 +21,17 @@
         "command": "code-couplet-vscode.linkSelection",
         "title": "Code Couplet: Link Selection"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Code Couplet",
+      "properties": {
+        "code-couplet.showLinkingSuccessMessage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show success message"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "yarn run package",

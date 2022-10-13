@@ -33,6 +33,8 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   // TODO:
   // 1b. register command to manually link comment, then manually select code
+  // TODO:
+  // 1c. register command to remove a linked comment and code
 
   // TODO:
   // 2. on save, invoke validation and display diagnostics (w/ quick fixes)
