@@ -1,28 +1,13 @@
-import { findSaveRoot, saveSchema } from "@lib/schema";
-import { getErrorMessage } from "@lib/utils";
 import * as vscode from "vscode";
 import { autoLinkSelectionCommand } from "./commands";
 import { LanguageConfiguration } from "./languageConfiguration";
-
-/**
- * Given func, return new function with the same signature that wraps any errors func throws
- * and shows them in a vscode info box and error console.
- */
-function errorWrapper<TInput extends any[], TOutput>(
-  func: (...args: TInput) => TOutput
-) {
-  return async (...args: TInput) => {
-    try {
-      return await func(...args);
-    } catch (e) {
-      vscode.window.showErrorMessage(getErrorMessage(e));
-      // TODO: log the error message
-      console.error(e);
-    }
-  };
-}
+import { activate as activateLogging, errorWrapper, log } from "./logging";
+import { activate as activateDecorations } from "./decorations";
 
 export async function activate(context: vscode.ExtensionContext) {
+  activateLogging(context);
+  activateDecorations(context);
+
   const languageConfig = new LanguageConfiguration();
 
   // 1. register command to couple code + comments

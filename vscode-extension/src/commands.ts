@@ -3,52 +3,10 @@ import { LanguageConfiguration } from "./languageConfiguration";
 import { findSingleLineComments } from "./parser";
 
 import { PROJECT_NAME } from "@lib/constants";
-import {
-  findSaveRoot,
-  loadSchema,
-  migrateToLatestFormat,
-  saveSchema,
-} from "@lib/schema";
-import { emptySchema, Range as SchemaRange } from "@lib/types";
+import { saveSchema } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
-
-function pos(line: number, char: number): vscode.Position {
-  return new vscode.Position(line, char);
-}
-
-function rangeToSerialize(range: vscode.Range): SchemaRange {
-  return {
-    start: {
-      line: range.start.line,
-      char: range.start.character,
-    },
-    end: {
-      line: range.end.line,
-      char: range.end.character,
-    },
-  };
-}
-
-function schemaRangeToVscode(range: SchemaRange): vscode.Range {
-  return new vscode.Range(
-    pos(range.start.line, range.start.char),
-    pos(range.end.line, range.end.char)
-  );
-}
-
-async function findRootAndSchema(editor: vscode.TextEditor) {
-  const { workspaceFolders } = vscode.workspace;
-  const saveRoot = await findSaveRoot(
-    editor.document.uri,
-    (workspaceFolders || []).map((ws) => ws.uri)
-  );
-  const currentSchema = await loadSchema(saveRoot, editor.document.uri);
-  if (currentSchema == null) {
-    return { schema: emptySchema(), saveRoot };
-  } else {
-    return { schema: migrateToLatestFormat(currentSchema), saveRoot };
-  }
-}
+import { vscodeRangeToSchema, pos } from "./typeConverters";
+import { findRootAndSchema, findIndexOfMatchingRanges } from "./schemaTools";
 
 /**
  * Commit the linked sections to the map file by loading the existing one and then saving it
@@ -61,7 +19,7 @@ async function commitNewRangeToMap(
 ): Promise<{ status: "added" | "updated"; saveRoot: vscode.Uri }> {
   // remark: technically there's a race condition if two of these commands run at once on the same source file
   // TODO: fix that race condition haha
-  const { schema, saveRoot } = await findRootAndSchema(editor);
+  const { schema, saveRoot } = await findRootAndSchema(editor.document.uri);
   const commentConfig = await config.GetCommentConfiguration(
     editor.document.languageId
   );
@@ -71,15 +29,26 @@ async function commitNewRangeToMap(
   const commentValue = editor.document.getText(commentRange);
   const codeValue = editor.document.getText(codeRange);
 
-  // TODO: what if there is already a link on this line? I think we should overwrite it?
-  schema.comments.push({
-    commentValue,
-    commentRange: rangeToSerialize(commentRange),
-    codeValue,
-    codeRange: rangeToSerialize(codeRange),
-  });
-  await saveSchema(saveRoot, editor.document.uri, schema);
-  return { saveRoot, status: "added" };
+  const existingIndex = findIndexOfMatchingRanges(
+    schema,
+    codeRange,
+    commentRange
+  );
+  if (existingIndex == -1) {
+    schema.comments.push({
+      commentRange: vscodeRangeToSchema(commentRange),
+      codeRange: vscodeRangeToSchema(codeRange),
+      commentValue,
+      codeValue,
+    });
+    await saveSchema(saveRoot, editor.document.uri, schema);
+    return { saveRoot, status: "added" };
+  } else {
+    schema.comments[existingIndex].commentValue = commentValue;
+    schema.comments[existingIndex].codeValue = codeValue;
+    await saveSchema(saveRoot, editor.document.uri, schema);
+    return { saveRoot, status: "updated" };
+  }
 }
 
 /**
@@ -90,21 +59,20 @@ async function removeRangeFromMap(
   commentRange: vscode.Range,
   codeRange: vscode.Range
 ): Promise<{ status: "removed" | "not found"; saveRoot: vscode.Uri }> {
-  const { schema, saveRoot } = await findRootAndSchema(editor);
+  const { schema, saveRoot } = await findRootAndSchema(editor.document.uri);
   // Find the codeRange and commentRange in the existing comments, and remove them
-  for (const comment of schema.comments) {
-    const existingCommentRange = schemaRangeToVscode(comment.commentRange);
-    const existingCodeRange = schemaRangeToVscode(comment.codeRange);
-    if (
-      commentRange.isEqual(existingCommentRange) &&
-      codeRange.isEqual(existingCodeRange)
-    ) {
-      schema.comments.splice(schema.comments.indexOf(comment), 1);
-      await saveSchema(saveRoot, editor.document.uri, schema);
-      return { saveRoot, status: "removed" };
-    }
+  const existingIndex = findIndexOfMatchingRanges(
+    schema,
+    codeRange,
+    commentRange
+  );
+  if (existingIndex == -1) {
+    return { saveRoot, status: "not found" };
+  } else {
+    schema.comments.splice(existingIndex, 1);
+    await saveSchema(saveRoot, editor.document.uri, schema);
+    return { saveRoot, status: "removed" };
   }
-  return { saveRoot, status: "not found" };
 }
 
 /**
@@ -195,33 +163,50 @@ export async function autoLinkSelectionCommand(config: LanguageConfiguration) {
     throw new Error(`could not save comment link: ${getErrorMessage(e)}`);
   }
 
-  const showSuccessMessage = vscode.workspace
-    .getConfiguration(PROJECT_NAME)
-    .get<boolean>("showLinkingSuccessMessage");
+  if (result) {
+    const showSuccessMessage = vscode.workspace
+      .getConfiguration(PROJECT_NAME)
+      .get<boolean>("showLinkingSuccessMessage");
 
-  if (result && showSuccessMessage) {
-    const undo = "Undo";
-    const neverAgain = "Don't show again";
-    const choice = await vscode.window.showInformationMessage(
-      "Linked comment with code",
-      { detail: `Location: ${result.saveRoot.fsPath}` },
-      undo,
-      neverAgain
-    );
-    if (choice === undo) {
-      const result = await removeRangeFromMap(editor, commentRange, codeRange);
-      if (result.status == "not found") {
-        throw new Error(`could not undo comment link: link not found`);
-      } else {
-        vscode.window.showInformationMessage("Unlinked comment with code", {
-          detail: `Location: ${result.saveRoot.fsPath}`,
-        });
-      }
-    } else if (choice === neverAgain) {
-      // TODO: add the config to the extension package json
-      await vscode.workspace
-        .getConfiguration(PROJECT_NAME)
-        .update("showLinkingSuccessMessage", false);
+    if (showSuccessMessage) {
+      await showLinkingSuccessMessage(editor, commentRange, codeRange, result);
+    } else {
+      // Show a status bar message instead
+      const { status } = result;
+      vscode.window.setStatusBarMessage(`Comment link: ${status}`, 4000);
     }
+  }
+}
+
+/**
+ * Shows a linking success info message with buttons to undo and never show again
+ */
+async function showLinkingSuccessMessage(
+  editor: vscode.TextEditor,
+  commentRange: vscode.Range,
+  codeRange: vscode.Range,
+  result: { status: "added" | "updated"; saveRoot: vscode.Uri }
+) {
+  const undo = "Undo";
+  const neverAgain = "Don't show again";
+  const choice = await vscode.window.showInformationMessage(
+    `Comment link: ${result.status}`,
+    { detail: `Location: ${result.saveRoot.fsPath}` },
+    undo,
+    neverAgain
+  );
+  if (choice === undo) {
+    const result = await removeRangeFromMap(editor, commentRange, codeRange);
+    if (result.status == "not found") {
+      throw new Error(`could not undo comment link: link not found`);
+    } else {
+      vscode.window.showInformationMessage("Unlinked comment with code", {
+        detail: `Location: ${result.saveRoot.fsPath}`,
+      });
+    }
+  } else if (choice === neverAgain) {
+    await vscode.workspace
+      .getConfiguration(PROJECT_NAME)
+      .update("showLinkingSuccessMessage", false);
   }
 }

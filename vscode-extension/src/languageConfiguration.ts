@@ -3,6 +3,8 @@ import * as path from "path";
 
 import * as vscode from "vscode";
 import * as json5 from "json5";
+import { getErrorMessage } from "@lib/utils";
+import { log } from "./logging";
 
 interface CommentConfig {
   lineComment?: string;
@@ -61,7 +63,8 @@ export class LanguageConfiguration {
 
       return config.comments;
     } catch (error) {
-      // TODO: Log error message to vscode output pane
+      // Log error message to vscode output pane
+      log(getErrorMessage(error));
       this.commentConfig.set(languageCode, null);
       return null;
     }
