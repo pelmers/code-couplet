@@ -3,6 +3,9 @@ import { URI, Utils } from "vscode-uri";
 import { exists, FileType, getFs } from "./fsShim";
 import { isRight } from "fp-ts/lib/Either";
 
+// Note: crypto is node-only, if we want to support web we'll need to use a different library
+import * as crypto from "crypto";
+
 const fs = getFs();
 
 const PATH_TRANSFORM_FRAGMENT = "cCCc";
@@ -117,7 +120,7 @@ export async function saveSchema(
 export async function loadSchema(
   saveRoot: URI,
   sourceFilePath: URI
-): Promise<TFile | null> {
+): Promise<{ schema: TFile; hash: string } | null> {
   const schemaPath = buildSchemaPath(saveRoot, sourceFilePath);
   if (!(await exists(schemaPath))) {
     return null;
@@ -129,7 +132,10 @@ export async function loadSchema(
   if (!isRight(validation)) {
     throw new Error(`Could not decode schema at ${sourceFilePath.path}`);
   }
-  return validation.right;
+  return {
+    schema: validation.right,
+    hash: crypto.createHash("md5").update(contents).digest("hex"),
+  };
 }
 
 export function migrateToLatestFormat(file: TFile): CurrentFile {

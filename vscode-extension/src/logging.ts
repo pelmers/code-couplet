@@ -11,6 +11,9 @@ export const activate = (context: vscode.ExtensionContext) => {
 };
 
 export function log(message: string) {
+  if (!output) {
+    throw new Error("logging not activated");
+  }
   output.appendLine(message);
 }
 
@@ -19,15 +22,26 @@ export function log(message: string) {
  * and shows them in a vscode info box and error console.
  */
 export function errorWrapper<TInput extends any[], TOutput>(
-  func: (...args: TInput) => TOutput
+  func: (...args: TInput) => TOutput,
+  params: {
+    errorPrefix?: string;
+    showErrorMessage?: boolean;
+    rethrow?: boolean;
+  } = {}
 ) {
   return async (...args: TInput) => {
     try {
       return await func(...args);
     } catch (e) {
-      vscode.window.showErrorMessage(getErrorMessage(e));
-      log(getErrorMessage(e));
-      console.error(e);
+      const prefix = params.errorPrefix ? params.errorPrefix + ": " : "";
+      const message = `${prefix}${getErrorMessage(e)}`;
+      if (params.showErrorMessage) {
+        vscode.window.showErrorMessage(message);
+      }
+      log(message);
+      if (params.rethrow) {
+        throw e;
+      }
     }
   };
 }

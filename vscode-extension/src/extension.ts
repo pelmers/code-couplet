@@ -2,18 +2,20 @@ import * as vscode from "vscode";
 import { autoLinkSelectionCommand } from "./commands";
 import { LanguageConfiguration } from "./languageConfiguration";
 import { activate as activateLogging, errorWrapper, log } from "./logging";
-import { activate as activateDecorations } from "./decorations";
+import { activate as activateSchemaModel } from "./SchemaModel";
 
 export async function activate(context: vscode.ExtensionContext) {
-  activateLogging(context);
-  activateDecorations(context);
-
   const languageConfig = new LanguageConfiguration();
+
+  activateLogging(context);
+  activateSchemaModel(context);
 
   // 1. register command to couple code + comments
   context.subscriptions.push(
     vscode.commands.registerCommand("code-couplet-vscode.linkSelection", () =>
-      errorWrapper(autoLinkSelectionCommand)(languageConfig)
+      errorWrapper(autoLinkSelectionCommand, { showErrorMessage: true })(
+        languageConfig
+      )
     )
   );
   // TODO:

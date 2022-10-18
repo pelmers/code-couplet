@@ -1,12 +1,19 @@
 import * as vscode from "vscode";
 import { LanguageConfiguration } from "./languageConfiguration";
-import { findSingleLineComments } from "./parser";
+import { findSingleLineComments } from "./commentParser";
 
 import { PROJECT_NAME } from "@lib/constants";
 import { saveSchema } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
 import { vscodeRangeToSchema, pos } from "./typeConverters";
 import { findRootAndSchema, findIndexOfMatchingRanges } from "./schemaTools";
+import { log } from "./logging";
+import { SchemaModel } from "./SchemaModel";
+
+export function activate(
+  context: vscode.ExtensionContext,
+  schemaModel: SchemaModel
+) {}
 
 /**
  * Commit the linked sections to the map file by loading the existing one and then saving it
@@ -17,8 +24,7 @@ async function commitNewRangeToMap(
   commentRange: vscode.Range,
   codeRange: vscode.Range
 ): Promise<{ status: "added" | "updated"; saveRoot: vscode.Uri }> {
-  // remark: technically there's a race condition if two of these commands run at once on the same source file
-  // TODO: fix that race condition haha
+  // TODO: move this schema loading to the schema model
   const { schema, saveRoot } = await findRootAndSchema(editor.document.uri);
   const commentConfig = await config.GetCommentConfiguration(
     editor.document.languageId
@@ -34,6 +40,8 @@ async function commitNewRangeToMap(
     codeRange,
     commentRange
   );
+  // TODO: what if the file is dirty and the existing schema comments need to move first?
+  // i.e. the saved schema we just loaded is out of date
   if (existingIndex == -1) {
     schema.comments.push({
       commentRange: vscodeRangeToSchema(commentRange),
@@ -73,6 +81,10 @@ async function removeRangeFromMap(
     await saveSchema(saveRoot, editor.document.uri, schema);
     return { saveRoot, status: "removed" };
   }
+}
+
+class Commands {
+  constructor(private schemaModel: SchemaModel) {}
 }
 
 /**
@@ -167,6 +179,12 @@ export async function autoLinkSelectionCommand(config: LanguageConfiguration) {
     const showSuccessMessage = vscode.workspace
       .getConfiguration(PROJECT_NAME)
       .get<boolean>("showLinkingSuccessMessage");
+
+    // Trigger our onDidSaveHandler to update decorations
+    await editor.document.save();
+    log(
+      `Document ${editor.document.uri.fsPath} saved after applying decorations`
+    );
 
     if (showSuccessMessage) {
       await showLinkingSuccessMessage(editor, commentRange, codeRange, result);

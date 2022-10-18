@@ -4,6 +4,8 @@ import { schemaRangeToVscode } from "./typeConverters";
 
 import * as vscode from "vscode";
 
+export const EMPTY_SCHEMA_HASH = "0";
+
 export async function findRootAndSchema(uri: vscode.Uri) {
   const { workspaceFolders } = vscode.workspace;
   const saveRoot = await findSaveRoot(
@@ -12,9 +14,10 @@ export async function findRootAndSchema(uri: vscode.Uri) {
   );
   const currentSchema = await loadSchema(saveRoot, uri);
   if (currentSchema == null) {
-    return { schema: emptySchema(), saveRoot };
+    return { schema: emptySchema(), saveRoot, hash: EMPTY_SCHEMA_HASH };
   } else {
-    return { schema: migrateToLatestFormat(currentSchema), saveRoot };
+    const { schema, hash } = currentSchema;
+    return { schema: migrateToLatestFormat(schema), saveRoot, hash };
   }
 }
 
