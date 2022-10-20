@@ -10,11 +10,11 @@ export const activate = (context: vscode.ExtensionContext) => {
   log(`Logging activated for ${PROJECT_NAME}`);
 };
 
-export function log(message: string) {
+export function log(...messages: unknown[]) {
   if (!output) {
     throw new Error("logging not activated");
   }
-  output.appendLine(message);
+  output.appendLine(messages.join(" "));
 }
 
 /**

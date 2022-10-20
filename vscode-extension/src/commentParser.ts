@@ -35,8 +35,9 @@ export async function findSingleLineComments(
   // remember to also escape forward slashes
   const expression = escapeRegExp(lineComment).replace(/\//gi, "\\/");
   // make a regex from expression, "g" required to match all lines
-  // add the .$ to match the end of the line
-  const regex = new RegExp(expression + ".*$", "igm");
+  // add the .*$ to match the end of the line
+  // prepend the ^\s* to match whitespace at the start of the line
+  const regex = new RegExp("^s*" + expression + ".*$", "igm");
   // apply regex across the content of the editor in the given range
   // note that undefined range = entire document
   const content = editor.document.getText(range);

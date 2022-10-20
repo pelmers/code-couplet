@@ -35,3 +35,26 @@ export function findIndexOfMatchingRanges(
     );
   });
 }
+
+export function countNewLines(text: string): number {
+  let pos = text.indexOf("\n");
+  let count = 0;
+  while (pos >= 0) {
+    count++;
+    pos = text.indexOf("\n", pos + 1);
+  }
+  return count;
+}
+
+export function lastLineLength(text: string): number {
+  const lastLineIndex = text.lastIndexOf("\n");
+  if (lastLineIndex === -1) {
+    return text.length;
+  }
+  return text.length - lastLineIndex - 1;
+}
+
+export function copySchema(schema: CurrentFile): CurrentFile {
+  // TODO: obviously this could be made more efficient
+  return JSON.parse(JSON.stringify(schema));
+}

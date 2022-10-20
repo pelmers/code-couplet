@@ -97,10 +97,8 @@ export function buildSchemaPath(saveRoot: URI, sourceURI: URI): URI {
   let sourcePath = sourceURI.path;
   // Remove the first part of sourcePath which overlaps saveRoot
   sourcePath = sourcePath.slice(saveRoot.path.length);
-  const transformedSourcePath = sourcePath.replace(
-    /\//g,
-    PATH_TRANSFORM_FRAGMENT
-  );
+  const transformedSourcePath =
+    sourcePath.replace(/\//g, PATH_TRANSFORM_FRAGMENT) + ".json";
   return Utils.joinPath(saveRoot, KNOWN_FOLDER_NAME, transformedSourcePath);
 }
 
@@ -109,10 +107,14 @@ export async function saveSchema(
   saveRoot: URI,
   sourceFilePath: URI,
   schema: CurrentFile
-): Promise<URI> {
-  const savePath = buildSchemaPath(saveRoot, sourceFilePath);
-  await fs.writeFile(savePath, Buffer.from(JSON.stringify(schema, null, 2)));
-  return savePath;
+): Promise<{ saveUri: URI; hash: string }> {
+  const saveUri = buildSchemaPath(saveRoot, sourceFilePath);
+  const contents = Buffer.from(JSON.stringify(schema, null, 2));
+  await fs.writeFile(saveUri, contents);
+  return {
+    saveUri,
+    hash: crypto.createHash("md5").update(contents.toString()).digest("hex"),
+  };
 }
 
 // Load the existing comment schema for the given file. If not found, then null.

@@ -12,7 +12,9 @@ const DECORATION_MAX_LINES = 10000;
  */
 export function decorate(
   editor: vscode.TextEditor,
-  comments: CurrentFile["comments"]
+  comments: CurrentFile["comments"],
+  commentDecorationType: vscode.TextEditorDecorationType,
+  codeDecorationType: vscode.TextEditorDecorationType
 ) {
   if (editor.document.lineCount > DECORATION_MAX_LINES) {
     log(
@@ -26,18 +28,8 @@ export function decorate(
     );
     return;
   }
-  // TODO: Question: should we colorize each pair differently? Or same color for all texts?
-  const commentDecorationType = vscode.window.createTextEditorDecorationType({
-    backgroundColor: "rgba(0, 255, 0, 0.2)",
-    // Border doesn't look great because I like to draw the range to the first char of the next line
-    // TODO: if we want to include border then add logic to shorten range by 1 if they do that
-    // border: "1px solid rgba(255, 255, 255, 0.5)",
-  });
-  const codeDecorationType = vscode.window.createTextEditorDecorationType({
-    backgroundColor: "rgba(0, 100, 255, 0.2)",
-    // see above note on borders
-    // border: "1px solid rgba(255, 255, 255, 0.5)",
-  });
+  editor.setDecorations(commentDecorationType, []);
+  editor.setDecorations(codeDecorationType, []);
   const commentRanges = [];
   const codeRanges = [];
   for (const comment of comments) {
@@ -45,13 +37,8 @@ export function decorate(
     // otherwise we will show a diagnostic to the user
     const commentRange = schemaRangeToVscode(comment.commentRange);
     const codeRange = schemaRangeToVscode(comment.codeRange);
-    if (
-      comment.commentValue === editor.document.getText(commentRange) &&
-      comment.codeValue === editor.document.getText(codeRange)
-    ) {
-      commentRanges.push(commentRange);
-      codeRanges.push(codeRange);
-    }
+    commentRanges.push(commentRange);
+    codeRanges.push(codeRange);
   }
   editor.setDecorations(commentDecorationType, commentRanges);
   editor.setDecorations(codeDecorationType, codeRanges);

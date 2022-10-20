@@ -1,27 +1,15 @@
 import * as vscode from "vscode";
-import { autoLinkSelectionCommand } from "./commands";
 import { LanguageConfiguration } from "./languageConfiguration";
 import { activate as activateLogging, errorWrapper, log } from "./logging";
 import { activate as activateSchemaModel } from "./SchemaModel";
+import { activate as activateCommands } from "./commands";
 
 export async function activate(context: vscode.ExtensionContext) {
   const languageConfig = new LanguageConfiguration();
 
   activateLogging(context);
-  activateSchemaModel(context);
-
-  // 1. register command to couple code + comments
-  context.subscriptions.push(
-    vscode.commands.registerCommand("code-couplet-vscode.linkSelection", () =>
-      errorWrapper(autoLinkSelectionCommand, { showErrorMessage: true })(
-        languageConfig
-      )
-    )
-  );
-  // TODO:
-  // 1b. register command to manually link comment, then manually select code
-  // TODO:
-  // 1c. register command to remove a linked comment and code
+  const schemaModel = activateSchemaModel(context);
+  activateCommands(context, schemaModel, languageConfig);
 
   // TODO:
   // 2. on save, invoke validation and display diagnostics (w/ quick fixes)
