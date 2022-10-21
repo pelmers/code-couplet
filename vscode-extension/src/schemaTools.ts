@@ -58,3 +58,14 @@ export function copySchema(schema: CurrentFile): CurrentFile {
   // TODO: obviously this could be made more efficient
   return JSON.parse(JSON.stringify(schema));
 }
+
+/**
+ * Return a unique id for the given schema by taking its current max and adding one
+ */
+export function nextId(schema: CurrentFile): number {
+  let currentMax = -1;
+  for (const comment of schema.comments) {
+    currentMax = Math.max(currentMax, comment.id);
+  }
+  return currentMax + 1;
+}

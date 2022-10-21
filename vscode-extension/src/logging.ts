@@ -1,4 +1,4 @@
-import { PROJECT_NAME } from "@lib/constants";
+import { DEBUG, PROJECT_NAME } from "@lib/constants";
 import { getErrorMessage } from "@lib/utils";
 import * as vscode from "vscode";
 
@@ -15,6 +15,12 @@ export function log(...messages: unknown[]) {
     throw new Error("logging not activated");
   }
   output.appendLine(messages.join(" "));
+}
+
+export function dlog(...messages: unknown[]) {
+  if (DEBUG) {
+    log(...messages);
+  }
 }
 
 /**

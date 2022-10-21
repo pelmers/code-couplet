@@ -14,7 +14,7 @@ import {
 import { decorate } from "./decorations";
 import { PROJECT_NAME } from "@lib/constants";
 import { schemaRangeToVscode } from "./typeConverters";
-import { errorWrapper as e, log } from "./logging";
+import { dlog, errorWrapper as e, log } from "./logging";
 import { saveSchema } from "@lib/schema";
 
 // TODO: as i write this i'm thinking maybe it should be an LSP instead???
@@ -59,6 +59,9 @@ export class SchemaModel {
   unsavedContentChanges: Map<string, vscode.TextDocumentContentChangeEvent[]> =
     new Map();
 
+  // This map serializes saving and loading on each file to fix races, e.g. willSave vs. save
+  ioSerializationPromises: Map<string, Promise<unknown>> = new Map();
+
   // TODO: Question: should we colorize each pair differently? Or same color for all texts?
   commentDecorationType = vscode.window.createTextEditorDecorationType({
     backgroundColor: "rgba(0, 255, 0, 0.2)",
@@ -102,6 +105,36 @@ export class SchemaModel {
     );
   }
 
+  /**
+   * Block fn until any currently running function on uri is complete
+   * BEWARE: nested calls will deadlock!
+   * @param uri uri to key the block
+   * @param fn called when the block is released
+   * @returns whatever fn returns
+   */
+  guardIO<TOutput>(
+    uri: vscode.Uri,
+    fn: () => Promise<TOutput>
+  ): Promise<TOutput> {
+    const key = uri.toString();
+    let existingPromise;
+    if (this.ioSerializationPromises.has(key)) {
+      existingPromise = this.ioSerializationPromises.get(key)!;
+      dlog(`Blocking IO for ${key}`);
+    } else {
+      existingPromise = Promise.resolve();
+    }
+    const promise = existingPromise.then(fn);
+    this.ioSerializationPromises.set(key, promise);
+    promise.finally(() => {
+      if (this.ioSerializationPromises.get(key) === promise) {
+        this.ioSerializationPromises.delete(key);
+        dlog(`Cleared IO block for ${key}`);
+      }
+    });
+    return promise;
+  }
+
   loadSchemaByUri = e(
     async (uri: vscode.Uri, params: { checkHash: boolean }) => {
       const { schema, hash } = await findRootAndSchema(uri);
@@ -140,7 +173,7 @@ export class SchemaModel {
         schema
       );
       this.lastSeenSchemaHashes.set(uri.toString(), newHash);
-      log(`Saved schema to ${saveUri.toString()}`);
+      dlog(`Saved schema to ${saveUri.toString()}`);
     },
     { rethrow: true }
   );
@@ -154,6 +187,7 @@ export class SchemaModel {
     let wasUpdated = false;
     // For every change in the document, update the comment/code ranges in the schema
     // similar prior art: https://github.com/Dart-Code/Dart-Code/blob/d996c73d6a455135b8e532ac266ef1f33704b0e7/src/decorations/hot_reload_coverage_decorations.ts#L72-L83
+    // TODO: this is buggy, how did vs code do it?
     if (!this.unsavedContentChanges.has(uriString)) {
       return { wasUpdated };
     }
@@ -167,13 +201,13 @@ export class SchemaModel {
           // If change.range is strictly before schemaRange, then shorten schema range
           if (
             cr.end.line < sr.start.line ||
-            (cr.end.line === sr.start.line && cr.end.character < sr.start.char)
+            (cr.end.line === sr.start.line && cr.end.character <= sr.start.char)
           ) {
             // Move start and end line by offset of removed lines (where offset = added - removed)
             const lineOffset = linesAdded - (cr.end.line - cr.start.line);
             sr.start.line += lineOffset;
             sr.end.line += lineOffset;
-            log(`Line offset is ${lineOffset}`);
+            dlog(`Line offset is ${lineOffset}`);
             if (cr.end.line === sr.start.line) {
               // Something was removed before the start of the schema range on the same line,
               // so move the start char by the calculated offset
@@ -184,15 +218,17 @@ export class SchemaModel {
               if (sr.start.line === sr.end.line) {
                 sr.end.char += charOffset;
               }
-              log(`Char offset is ${charOffset}`);
+              dlog(`Char offset is ${charOffset}`);
             }
             wasUpdated = true;
+          } else {
+            dlog('Change range overlaps schema range', cr, sr);
           }
           // TODO: what happens if the change range overlaps the schema range?
         }
       }
     }
-    log(`Processed ${changes.length} pending changes for ${uriString}`);
+    dlog(`Processed ${changes.length} pending changes for ${uriString}`);
     this.unsavedContentChanges.delete(uriString);
     // TODO: sanity check, what if some of the new ranges are out of bounds?
     // TODO: or maybe some end < start somewhere?
@@ -218,83 +254,88 @@ export class SchemaModel {
     if (this.unsavedContentChanges.has(uriString)) {
       this.unsavedContentChanges.get(uriString)!.push(...event.contentChanges);
     } else {
-      this.unsavedContentChanges.set(uriString, event.contentChanges.slice());
+      this.unsavedContentChanges.set(uriString, event.contentChanges.concat());
     }
   };
 
-  onWillSaveTextDocument = async (event: vscode.TextDocumentWillSaveEvent) => {
-    log("onWillSaveTextDocument", event.document.uri.toString());
-    // TODO: what happens if a plugin like prettier changes the text in their own save handler?
-    const doc = event.document;
-    // TODO: if there's no changes then just return here
-    const schema = await this.loadSchemaByUri(doc.uri, { checkHash: true });
-    const { wasUpdated } = this.updateSchemaFromPendingChanges(doc, schema!);
+  onWillSaveTextDocument = async (event: vscode.TextDocumentWillSaveEvent) =>
+    this.guardIO(event.document.uri, async () => {
+      dlog("onWillSaveTextDocument", event.document.uri.toString());
+      // TODO: what happens if a plugin like prettier changes the text in their own save handler?
+      const doc = event.document;
+      // TODO: if there's no changes then just return here
+      const schema = await this.loadSchemaByUri(doc.uri, { checkHash: true });
+      const { wasUpdated } = this.updateSchemaFromPendingChanges(doc, schema!);
 
-    // If we saved even without updating then we would dump a lot of empty schemas in the save root
-    if (wasUpdated) {
-      await this.saveSchemaByUri(doc.uri, schema!, { checkHash: true });
-    }
-  };
+      // If we saved even without updating then we would dump a lot of empty schemas in the save root
+      if (wasUpdated) {
+        await this.saveSchemaByUri(doc.uri, schema!, { checkHash: true });
+      }
+    });
 
   onDidSaveTextDocument = async (doc: vscode.TextDocument) => {
-    log("onDidSaveTextDocument", doc.uri.toString());
+    dlog("onDidSaveTextDocument", doc.uri.toString());
     // When we have saved a document, reload the schema (as we do on open)
     await this.onDidOpenTextDocument(doc);
   };
 
-  onDidOpenTextDocument = async (doc: vscode.TextDocument) => {
-    log("onDidOpenTextDocument", doc.uri.toString());
-    this.diagnosticCollection.delete(doc.uri);
-    const schema = await this.loadSchemaByUri(doc.uri, { checkHash: true });
-    // Publish diagnostics to the doc based on any mismatched comments from the schema
-    const diagnostics: vscode.Diagnostic[] = [];
-    for (const comment of schema!.comments) {
-      const commentRange = schemaRangeToVscode(comment.commentRange);
-      const codeRange = schemaRangeToVscode(comment.codeRange);
-      const commentText = doc.getText(commentRange);
-      const codeText = doc.getText(codeRange);
-      if (commentText !== comment.commentValue) {
-        diagnostics.push({
-          range: commentRange,
-          message: `Comment text does not match schema. Expected: "${comment.commentValue}", got: "${commentText}"`,
-          severity: vscode.DiagnosticSeverity.Warning,
-          source: PROJECT_NAME,
-        });
-      } else if (codeText !== comment.codeValue) {
-        diagnostics.push({
-          range: codeRange,
-          message: `Code text does not match schema. Expected: "${comment.codeValue}", got: "${codeText}"`,
-          severity: vscode.DiagnosticSeverity.Warning,
-          source: PROJECT_NAME,
-        });
+  onDidOpenTextDocument = async (doc: vscode.TextDocument) =>
+    this.guardIO(doc.uri, async () => {
+      dlog("onDidOpenTextDocument", doc.uri.toString());
+      this.diagnosticCollection.delete(doc.uri);
+      const schema = await this.loadSchemaByUri(doc.uri, { checkHash: true });
+      // Publish diagnostics to the doc based on any mismatched comments from the schema
+      const diagnostics: vscode.Diagnostic[] = [];
+      for (const comment of schema!.comments) {
+        const commentRange = schemaRangeToVscode(comment.commentRange);
+        const codeRange = schemaRangeToVscode(comment.codeRange);
+        const commentText = doc.getText(commentRange);
+        const codeText = doc.getText(codeRange);
+        if (commentText !== comment.commentValue) {
+          diagnostics.push({
+            range: commentRange,
+            message: `Comment text does not match schema. Expected: "${comment.commentValue}", got: "${commentText}"`,
+            severity: vscode.DiagnosticSeverity.Warning,
+            source: PROJECT_NAME,
+          });
+        } else if (codeText !== comment.codeValue) {
+          diagnostics.push({
+            range: codeRange,
+            message: `Code text does not match schema. Expected: "${comment.codeValue}", got: "${codeText}"`,
+            severity: vscode.DiagnosticSeverity.Warning,
+            source: PROJECT_NAME,
+          });
+        }
       }
-    }
-    if (diagnostics.length > 0) {
-      log(
-        `Publishing ${diagnostics.length} diagnostics for ${doc.uri.toString()}`
-      );
-    }
-    this.diagnosticCollection.set(doc.uri, diagnostics);
-    // If the current active editor is the one that we just opened then re-render decorations
-    const { activeTextEditor } = vscode.window;
-    if (activeTextEditor && activeTextEditor.document.uri === doc.uri) {
-      this.decorateByEditor(activeTextEditor, schema!.comments);
-    }
-  };
+      if (diagnostics.length > 0) {
+        log(
+          `Publishing ${
+            diagnostics.length
+          } diagnostics for ${doc.uri.toString()}`
+        );
+      }
+      this.diagnosticCollection.set(doc.uri, diagnostics);
+      // If the current active editor is the one that we just opened then re-render decorations
+      const { activeTextEditor } = vscode.window;
+      if (activeTextEditor && activeTextEditor.document.uri === doc.uri) {
+        this.decorateByEditor(activeTextEditor, schema!.comments);
+      }
+    });
 
   onDidChangeActiveEditor = async (editor: vscode.TextEditor | undefined) => {
-    log(
+    dlog(
       "onDidChangeActiveEditor",
       editor?.document.uri.toString() || "(new editor)"
     );
     if (editor != null) {
       await e(
-        async () => {
-          const schema = await this.loadSchemaByUri(editor.document.uri, {
-            checkHash: true,
-          });
-          this.decorateByEditor(editor, schema!.comments);
-        },
+        () =>
+          this.guardIO(editor.document.uri, async () => {
+            const schema = await this.loadSchemaByUri(editor.document.uri, {
+              checkHash: true,
+            });
+            this.decorateByEditor(editor, schema!.comments);
+          }),
         { errorPrefix: `error decorating ${editor.document.uri.toString()}` }
       )();
     }

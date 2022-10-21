@@ -21,6 +21,7 @@ const CommentV1 = t.type({
   commentRange: Range,
   codeRange: Range,
   codeValue: t.string,
+  id: t.number,
 });
 export type CommentV1 = t.TypeOf<typeof CommentV1>;
 

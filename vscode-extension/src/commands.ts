@@ -6,7 +6,7 @@ import { PROJECT_NAME } from "@lib/constants";
 import { saveSchema } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
 import { vscodeRangeToSchema, pos } from "./typeConverters";
-import { findRootAndSchema, findIndexOfMatchingRanges } from "./schemaTools";
+import { findRootAndSchema, findIndexOfMatchingRanges, nextId } from "./schemaTools";
 import { log, errorWrapper as e } from "./logging";
 import { SchemaModel } from "./SchemaModel";
 
@@ -18,6 +18,15 @@ export function activate(
   const commands = new Commands(schemaModel, languageConfig);
   context.subscriptions.push(commands);
 }
+
+function lastCharacterOfLine(
+  document: vscode.TextDocument,
+  line: number
+): number {
+  const lastLine = document.lineAt(line);
+  return lastLine.range.end.character;
+}
+
 class Commands {
   disposable: vscode.Disposable;
 
@@ -73,14 +82,13 @@ class Commands {
       codeRange,
       commentRange
     );
-    // TODO: what if the file is dirty and the existing schema comments need to move first?
-    // i.e. the saved schema we just loaded is out of date
     if (existingIndex == -1) {
       schema.comments.push({
         commentRange: vscodeRangeToSchema(commentRange),
         codeRange: vscodeRangeToSchema(codeRange),
         commentValue,
         codeValue,
+        id: nextId(schema)
       });
       await this.schemaModel.saveSchemaByUri(editor.document.uri, schema, {
         checkHash: true,
@@ -146,7 +154,10 @@ class Commands {
       // That way the user can be lazy about drawing selection boxes and it still works
       range = selection.with(
         selection.start.with({ character: 0 }),
-        selection.end.with({ character: 0, line: selection.end.line + 1 })
+        selection.end.with({
+          character: lastCharacterOfLine(editor.document, selection.end.line),
+          line: selection.end.line,
+        })
       );
     }
 
@@ -180,11 +191,12 @@ class Commands {
     };
     let commentRange: vscode.Range | undefined;
     let codeRange: vscode.Range | undefined;
-    for (let line = start.line; line < end.line; line++) {
+    for (let line = start.line; line <= end.line; line++) {
       const lineType = getLineType(line);
       if (lineType === "empty") {
         continue;
       }
+      const endChar = lastCharacterOfLine(editor.document, line);
       if (lineType === "comment") {
         if (codeRange) {
           throw new Error(
@@ -194,10 +206,10 @@ class Commands {
         if (commentRange) {
           commentRange = commentRange.with(
             commentRange.start,
-            pos(line + 1, 0)
+            pos(line, endChar)
           );
         } else {
-          commentRange = new vscode.Range(pos(line, 0), pos(line + 1, 0));
+          commentRange = new vscode.Range(pos(line, 0), pos(line, endChar));
         }
       } else if (lineType === "code") {
         if (!commentRange) {
@@ -206,9 +218,9 @@ class Commands {
           );
         }
         if (codeRange) {
-          codeRange = codeRange.with(codeRange.start, pos(line + 1, 0));
+          codeRange = codeRange.with(codeRange.start, pos(line, endChar));
         } else {
-          codeRange = new vscode.Range(pos(line, 0), pos(line + 1, 0));
+          codeRange = new vscode.Range(pos(line, 0), pos(line, endChar));
         }
       }
     }
