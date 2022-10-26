@@ -1,7 +1,9 @@
-import { File, CurrentFile, TFile } from "./types";
+import { File, CurrentFile, TFile, CurrentComment } from "./types";
 import { URI, Utils } from "vscode-uri";
 import { exists, FileType, getFs } from "./fsShim";
 import { isRight } from "fp-ts/lib/Either";
+
+import * as path from "path";
 
 // Note: crypto is node-only, if we want to support web we'll need to use a different library
 import * as crypto from "crypto";
@@ -10,6 +12,8 @@ const fs = getFs();
 
 const PATH_TRANSFORM_FRAGMENT = "cCCc";
 const KNOWN_FOLDER_NAME = ".cc_mappings";
+
+const saveRootCache = new Map<string, URI>();
 
 async function findClosestParentContainingFolder(
   from: URI,
@@ -40,66 +44,91 @@ async function findClosestParentContainingFolder(
  * 2. the closest comment schema folder (i.e. KNOWN_FOLDER_NAME folder),
  * 4. the folder of the source file path itself
  */
-export async function findSaveRoot(
+export const findSaveRoot = async (
   sourceFilePath: URI,
   workspaceFolders?: URI[]
-): Promise<URI> {
-  // Case 1: repo root
-  const repoRoots = (
-    await Promise.all([
-      findClosestParentContainingFolder(sourceFilePath, ".git").catch(
-        () => null
-      ),
-      findClosestParentContainingFolder(sourceFilePath, ".svn").catch(
-        () => null
-      ),
-      findClosestParentContainingFolder(sourceFilePath, ".hg").catch(
-        () => null
-      ),
-    ])
-  ).filter(Boolean);
-  // If any of repoRoots are non-empty, pick the closest one and return its URI
-  // Sorting: the closest one to sourceFilePath is the longest path
-  repoRoots.sort((a, b) => b!.fsPath.length - a!.fsPath.length);
-  if (repoRoots.length > 0 && repoRoots[0] != null) {
-    return repoRoots[0];
-  }
-  // Case 2: workspace folder
-  if (workspaceFolders != null) {
-    const sortedWorkspaceFolders = workspaceFolders
-      .slice()
-      .sort((a, b) => b.fsPath.length - a.fsPath.length);
-    for (const wsFolder of sortedWorkspaceFolders) {
-      // If the wsFolder contains sourceFilePath, then return it
-      if (sourceFilePath.fsPath.startsWith(wsFolder.fsPath)) {
-        return wsFolder;
+  // TODO: add option to skip cache?
+): Promise<URI> => {
+  async function findRoot() {
+    // Case 1: repo root
+    const repoRoots = (
+      await Promise.all([
+        findClosestParentContainingFolder(sourceFilePath, ".git").catch(
+          () => null
+        ),
+        findClosestParentContainingFolder(sourceFilePath, ".svn").catch(
+          () => null
+        ),
+        findClosestParentContainingFolder(sourceFilePath, ".hg").catch(
+          () => null
+        ),
+      ])
+    ).filter(Boolean);
+    // If any of repoRoots are non-empty, pick the closest one and return its URI
+    // Sorting: the closest one to sourceFilePath is the longest path
+    repoRoots.sort((a, b) => b!.fsPath.length - a!.fsPath.length);
+    if (repoRoots.length > 0 && repoRoots[0] != null) {
+      return repoRoots[0];
+    }
+    // Case 2: workspace folder
+    if (workspaceFolders != null) {
+      const sortedWorkspaceFolders = workspaceFolders
+        .slice()
+        .sort((a, b) => b.fsPath.length - a.fsPath.length);
+      for (const wsFolder of sortedWorkspaceFolders) {
+        // If the wsFolder contains sourceFilePath, then return it
+        if (sourceFilePath.fsPath.startsWith(wsFolder.fsPath)) {
+          return wsFolder;
+        }
       }
     }
+    // Case 3: closest known name folder
+    const knownRoot = await findClosestParentContainingFolder(
+      sourceFilePath,
+      KNOWN_FOLDER_NAME
+    ).catch(() => null);
+    if (knownRoot != null) {
+      return knownRoot;
+    }
+    // Case 4: the folder containing the current file itself
+    return Utils.dirname(sourceFilePath);
   }
-  // Case 3: closest known name folder
-  const knownRoot = await findClosestParentContainingFolder(
-    sourceFilePath,
-    KNOWN_FOLDER_NAME
-  ).catch(() => null);
-  if (knownRoot != null) {
-    return knownRoot;
+  if (saveRootCache.has(sourceFilePath.fsPath)) {
+    return saveRootCache.get(sourceFilePath.fsPath)!;
+  } else {
+    const root = await findRoot();
+    saveRootCache.set(sourceFilePath.fsPath, root);
+    return root;
   }
-  // Case 4: the folder containing the current file itself
-  return Utils.dirname(sourceFilePath);
-}
+};
 
 /**
  * Join save root and relative source file path into a path to its schema file
  * If the sourcePath is not located under saveRoot, then throw an error.
  * Input saveRoot is the path to the workspace/repository root, computed by findSaveRoot.
  */
-export function buildSchemaPath(saveRoot: URI, sourceURI: URI): URI {
+export function buildSchemaPath(saveRoot: URI, sourceURI?: URI): URI {
+  if (!sourceURI) {
+    return Utils.joinPath(saveRoot, KNOWN_FOLDER_NAME);
+  }
   let sourcePath = sourceURI.path;
   // Remove the first part of sourcePath which overlaps saveRoot
   sourcePath = sourcePath.slice(saveRoot.path.length);
   const transformedSourcePath =
     sourcePath.replace(/\//g, PATH_TRANSFORM_FRAGMENT) + ".json";
   return Utils.joinPath(saveRoot, KNOWN_FOLDER_NAME, transformedSourcePath);
+}
+
+export function schemaFileUriToSourceUri(schemaFileUri: URI) {
+  const sourcePath = schemaFileUri.path
+    .slice(schemaFileUri.path.lastIndexOf(KNOWN_FOLDER_NAME) + 1)
+    .replace(/\.json$/, "")
+    .replace(new RegExp(PATH_TRANSFORM_FRAGMENT, "g"), "/");
+  return URI.from({
+    scheme: schemaFileUri.scheme,
+    authority: schemaFileUri.authority,
+    path: sourcePath,
+  });
 }
 
 // Save the comment schema to its map file, returns the URI of the saved path.
@@ -142,4 +171,13 @@ export async function loadSchema(
 
 export function migrateToLatestFormat(file: TFile): CurrentFile {
   return file;
+}
+
+export function resolveCodePath(sourceUri: URI, comment: CurrentComment) {
+  // Resolve the uri based on source uri and code relative path
+  return Utils.joinPath(sourceUri, comment.codeRelativePath);
+}
+
+export function getCodeRelativePath(commentUri: URI, codeUri: URI) {
+  return path.relative(commentUri.path, codeUri.path);
 }

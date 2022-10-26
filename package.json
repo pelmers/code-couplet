@@ -10,6 +10,7 @@
     "fp-ts": "^2.12.3",
     "io-ts": "^2.2.19",
     "typescript-json": "^3.3.10",
+    "vscode-languageserver-textdocument": "^1.0.7",
     "vscode-uri": "^3.0.3"
   },
   "devDependencies": {
@@ -22,7 +23,6 @@
     "typescript": "^4.6.4"
   },
   "scripts": {
-    "build": "webpack --config webpack.config.js",
     "build-extension": "cd vscode-extension && npm run build",
     "format": "node_modules/.bin/prettier --ignore-path .gitignore --write '.'"
   }

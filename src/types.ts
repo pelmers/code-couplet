@@ -19,11 +19,22 @@ export type Range = t.TypeOf<typeof Range>;
 const CommentV1 = t.type({
   commentValue: t.string,
   commentRange: Range,
+  // The code range does not have to be in the same file.
+  // It can be in a different file, and we find it by following the codeRelativePath.
+  // The diagnostic then will only appear on the file that contains the comment.
+  // TODO: to implement this, we will need to do whole-project schema indexing
+  codeRelativePath: t.string,
   codeRange: Range,
   codeValue: t.string,
   id: t.number,
+  // If a comment is marked as tracked, then if we lose it on edits, we will try to find it
+  // by scanning the document(s) again.
+  // Would be unnecesary if document edit following were better...
+  // When added by command, comments are tracked.
+  // If we lose track because we cannot uniquely identify it on document scan, mark it untracked.
+  isTracked: t.boolean,
 });
-export type CommentV1 = t.TypeOf<typeof CommentV1>;
+type CommentV1 = t.TypeOf<typeof CommentV1>;
 
 const ConfigurationV1 = t.type({
   lineComment: optional(t.string),
@@ -43,6 +54,7 @@ export type TFile = t.TypeOf<typeof File>;
 
 // * This type should match the latest version
 export type CurrentFile = t.TypeOf<typeof FileV1>;
+export type CurrentComment = CurrentFile["comments"][number];
 
 export function emptySchema(): CurrentFile {
   return {

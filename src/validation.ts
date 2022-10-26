@@ -1,5 +1,7 @@
 import { Range, CommentV1, CurrentFile } from "./types";
 
+import { TextDocument } from "vscode-languageserver-textdocument";
+
 export enum ErrorType {
   // The text under the comment range does not match
   CommentMismatch = 1,
@@ -33,7 +35,7 @@ export type ValidationError = {
  * note: the length may not match the number of comments in the schema (it only includes errors)
  */
 export function validate(
-  contents: string,
+  doc: TextDocument,
   schema: CurrentFile
 ): ValidationError[] {
   // TODO: remember to ignore leading whitespace

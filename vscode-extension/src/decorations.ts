@@ -1,5 +1,5 @@
 import { PROJECT_NAME } from "@lib/constants";
-import { CurrentFile } from "@lib/types";
+import { CurrentComment, CurrentFile } from "@lib/types";
 import * as vscode from "vscode";
 import { log } from "./logging";
 import { schemaRangeToVscode } from "./typeConverters";
@@ -12,7 +12,7 @@ const DECORATION_MAX_LINES = 10000;
  */
 export function decorate(
   editor: vscode.TextEditor,
-  comments: CurrentFile["comments"],
+  comments: CurrentComment[],
   commentDecorationType: vscode.TextEditorDecorationType,
   codeDecorationType: vscode.TextEditorDecorationType
 ) {

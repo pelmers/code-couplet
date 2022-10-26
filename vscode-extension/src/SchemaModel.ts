@@ -5,8 +5,9 @@
 
 import * as vscode from "vscode";
 
-import { CurrentFile } from "@lib/types";
+import { CurrentComment, CurrentFile } from "@lib/types";
 import {
+  copySchema,
   countNewLines,
   findRootAndSchema,
   lastLineLength,
@@ -16,6 +17,7 @@ import { PROJECT_NAME } from "@lib/constants";
 import { schemaRangeToVscode } from "./typeConverters";
 import { dlog, errorWrapper as e, log } from "./logging";
 import { saveSchema } from "@lib/schema";
+import { getDiagnostics } from "./diagnostics";
 
 // TODO: as i write this i'm thinking maybe it should be an LSP instead???
 // that's kind of the whole point of lsp right?
@@ -184,6 +186,7 @@ export class SchemaModel {
   ) => {
     const { uri } = doc;
     const uriString = uri.toString();
+    const originalSchema = copySchema(schema);
     let wasUpdated = false;
     // For every change in the document, update the comment/code ranges in the schema
     // similar prior art: https://github.com/Dart-Code/Dart-Code/blob/d996c73d6a455135b8e532ac266ef1f33704b0e7/src/decorations/hot_reload_coverage_decorations.ts#L72-L83
@@ -222,7 +225,7 @@ export class SchemaModel {
             }
             wasUpdated = true;
           } else {
-            dlog('Change range overlaps schema range', cr, sr);
+            dlog("Change range overlaps schema range", cr, sr);
           }
           // TODO: what happens if the change range overlaps the schema range?
         }
@@ -232,14 +235,12 @@ export class SchemaModel {
     this.unsavedContentChanges.delete(uriString);
     // TODO: sanity check, what if some of the new ranges are out of bounds?
     // TODO: or maybe some end < start somewhere?
-    // TODO: perhaps reset them to the original values (then how do i check identity? add an id field?)
+    // TODO: recheck the document, for any schema ranges now incorrect, try to fix them
+    // TODO: if we can't fix them, then reset to the original
     return { wasUpdated };
   };
 
-  decorateByEditor(
-    editor: vscode.TextEditor,
-    comments: CurrentFile["comments"]
-  ) {
+  decorateByEditor(editor: vscode.TextEditor, comments: CurrentComment[]) {
     decorate(
       editor,
       comments,
@@ -285,28 +286,7 @@ export class SchemaModel {
       this.diagnosticCollection.delete(doc.uri);
       const schema = await this.loadSchemaByUri(doc.uri, { checkHash: true });
       // Publish diagnostics to the doc based on any mismatched comments from the schema
-      const diagnostics: vscode.Diagnostic[] = [];
-      for (const comment of schema!.comments) {
-        const commentRange = schemaRangeToVscode(comment.commentRange);
-        const codeRange = schemaRangeToVscode(comment.codeRange);
-        const commentText = doc.getText(commentRange);
-        const codeText = doc.getText(codeRange);
-        if (commentText !== comment.commentValue) {
-          diagnostics.push({
-            range: commentRange,
-            message: `Comment text does not match schema. Expected: "${comment.commentValue}", got: "${commentText}"`,
-            severity: vscode.DiagnosticSeverity.Warning,
-            source: PROJECT_NAME,
-          });
-        } else if (codeText !== comment.codeValue) {
-          diagnostics.push({
-            range: codeRange,
-            message: `Code text does not match schema. Expected: "${comment.codeValue}", got: "${codeText}"`,
-            severity: vscode.DiagnosticSeverity.Warning,
-            source: PROJECT_NAME,
-          });
-        }
-      }
+      const diagnostics = getDiagnostics(doc, schema!);
       if (diagnostics.length > 0) {
         log(
           `Publishing ${

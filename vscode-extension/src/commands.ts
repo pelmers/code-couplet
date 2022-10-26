@@ -3,19 +3,20 @@ import { LanguageConfiguration } from "./languageConfiguration";
 import { findSingleLineComments } from "./commentParser";
 
 import { PROJECT_NAME } from "@lib/constants";
-import { saveSchema } from "@lib/schema";
+import { getCodeRelativePath, saveSchema } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
 import { vscodeRangeToSchema, pos } from "./typeConverters";
-import { findRootAndSchema, findIndexOfMatchingRanges, nextId } from "./schemaTools";
+import { findIndexOfMatchingRanges, nextId } from "./schemaTools";
 import { log, errorWrapper as e } from "./logging";
-import { SchemaModel } from "./SchemaModel";
+import { SchemaIndex } from "./SchemaIndex";
+import { CurrentComment } from "@lib/types";
 
 export function activate(
   context: vscode.ExtensionContext,
-  schemaModel: SchemaModel,
+  SchemaIndex: SchemaIndex,
   languageConfig: LanguageConfiguration
 ) {
-  const commands = new Commands(schemaModel, languageConfig);
+  const commands = new Commands(SchemaIndex, languageConfig);
   context.subscriptions.push(commands);
 }
 
@@ -31,7 +32,7 @@ class Commands {
   disposable: vscode.Disposable;
 
   constructor(
-    private schemaModel: SchemaModel,
+    private schemaIndex: SchemaIndex,
     private languageConfig: LanguageConfiguration
   ) {
     this.disposable = vscode.Disposable.from(
@@ -57,11 +58,11 @@ class Commands {
     config: LanguageConfiguration,
     commentRange: vscode.Range,
     codeRange: vscode.Range
-  ): Promise<{ status: string }> {
-    const schema = (await this.schemaModel.loadSchemaByUri(
-      editor.document.uri,
-      { checkHash: true }
-    ))!;
+  ): Promise<{ status: string; comment: CurrentComment }> {
+    const { uri } = editor.document;
+    const schema = (await this.schemaIndex.loadSchemaByUri(uri, {
+      checkHash: true,
+    }))!;
     const commentConfig = await config.GetCommentConfiguration(
       editor.document.languageId
     );
@@ -83,58 +84,66 @@ class Commands {
       commentRange
     );
     if (existingIndex == -1) {
-      schema.comments.push({
+      const id = nextId(schema);
+      const comment = {
         commentRange: vscodeRangeToSchema(commentRange),
         codeRange: vscodeRangeToSchema(codeRange),
+        codeRelativePath: getCodeRelativePath(uri, uri),
         commentValue,
         codeValue,
-        id: nextId(schema)
-      });
-      await this.schemaModel.saveSchemaByUri(editor.document.uri, schema, {
+        id,
+        isTracked: true,
+      };
+      schema.comments.push(comment);
+      await this.schemaIndex.saveSchemaByUri(uri, schema, {
         checkHash: true,
       });
-      this.schemaModel.decorateByEditor(editor, schema.comments);
-      return { status: "added" };
+      this.schemaIndex.decorateByEditor(editor);
+      return { status: "added", comment };
     } else {
       schema.comments[existingIndex].commentValue = commentValue;
       schema.comments[existingIndex].codeValue = codeValue;
-      await this.schemaModel.saveSchemaByUri(editor.document.uri, schema, {
+      await this.schemaIndex.saveSchemaByUri(uri, schema, {
         checkHash: true,
       });
-      this.schemaModel.decorateByEditor(editor, schema.comments);
-      return { status: "updated" };
+      this.schemaIndex.decorateByEditor(editor);
+      return { status: "updated", comment: schema.comments[existingIndex] };
     }
   }
 
   /**
    * Remove the linked sections from the map file by loading the existing one and then saving it
    */
-  async removeRangeFromMap(
+  async removeCommentFromSchema(
     editor: vscode.TextEditor,
-    commentRange: vscode.Range,
-    codeRange: vscode.Range
-  ): Promise<{ status: "removed" | "not found"; saveRoot: vscode.Uri }> {
-    const { schema, saveRoot } = await findRootAndSchema(editor.document.uri);
+    comment: CurrentComment
+  ): Promise<
+    { status: "removed"; saveUri: vscode.Uri } | { status: "not found" }
+  > {
+    const schema = (await this.schemaIndex.loadSchemaByUri(
+      editor.document.uri,
+      { checkHash: true }
+    ))!;
     if (editor.document.isDirty) {
       throw new Error(
         `Cannot remove link because of unsaved changes. Please save the document first.`
       );
     }
     // Find the codeRange and commentRange in the existing comments, and remove them
-    const existingIndex = findIndexOfMatchingRanges(
-      schema,
-      codeRange,
-      commentRange
-    );
+    const existingIndex = schema.comments.findIndex((c) => c.id === comment.id);
     if (existingIndex == -1) {
-      return { saveRoot, status: "not found" };
+      return { status: "not found" };
     } else {
       schema.comments.splice(existingIndex, 1);
-      await this.schemaModel.saveSchemaByUri(editor.document.uri, schema, {
-        checkHash: true,
-      });
-      this.schemaModel.decorateByEditor(editor, schema.comments);
-      return { saveRoot, status: "removed" };
+      const saveUri = await this.schemaIndex.saveSchemaByUri(
+        editor.document.uri,
+        schema,
+        {
+          checkHash: true,
+        }
+      );
+      this.schemaIndex.decorateByEditor(editor);
+      return { saveUri, status: "removed" };
     }
   }
 
@@ -248,12 +257,7 @@ class Commands {
         .get<boolean>("showLinkingSuccessMessage");
 
       if (showSuccessMessage) {
-        await this.showLinkingSuccessMessage(
-          editor,
-          commentRange,
-          codeRange,
-          result
-        );
+        await this.showLinkingSuccessMessage(editor, result);
       } else {
         // Show a status bar message instead
         const { status } = result;
@@ -267,28 +271,23 @@ class Commands {
    */
   async showLinkingSuccessMessage(
     editor: vscode.TextEditor,
-    commentRange: vscode.Range,
-    codeRange: vscode.Range,
-    result: { status: string }
+    result: { status: string; comment: CurrentComment }
   ) {
+    const { status, comment } = result;
     const undo = "Undo";
     const neverAgain = "Don't show again";
     const choice = await vscode.window.showInformationMessage(
-      `Comment link: ${result.status}`,
+      `Comment link: ${status}`,
       undo,
       neverAgain
     );
     if (choice === undo) {
-      const result = await this.removeRangeFromMap(
-        editor,
-        commentRange,
-        codeRange
-      );
-      if (result.status == "not found") {
+      const undoResult = await this.removeCommentFromSchema(editor, comment);
+      if (undoResult.status == "not found") {
         throw new Error(`could not undo comment link: link not found`);
       } else {
         vscode.window.showInformationMessage("Unlinked comment with code", {
-          detail: `Location: ${result.saveRoot.fsPath}`,
+          detail: `Location: ${undoResult.saveUri.fsPath}`,
         });
       }
     } else if (choice === neverAgain) {

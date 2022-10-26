@@ -13,6 +13,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // TODO:
   // 2. on save, invoke validation and display diagnostics (w/ quick fixes)
+  // 2b. quick fix ideas:
+  // - update range of code / comment
+  // - remove comment
+  // - jump to manually edit schema file
 
   // TODO:
   // 3. during editing, annotate linked regions with some color or decoration
