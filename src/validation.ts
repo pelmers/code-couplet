@@ -1,4 +1,4 @@
-import { Range, CommentV1, CurrentFile } from "./types";
+import { Range, CurrentComment, CurrentFile } from "./types";
 
 import { TextDocument } from "vscode-languageserver-textdocument";
 
@@ -24,7 +24,7 @@ export type ValidationError = {
     code: string;
   };
   // Fix is only provided for moved comments
-  fix?: CommentV1;
+  fix?: CurrentComment;
 };
 
 /**

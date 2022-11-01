@@ -1,14 +1,14 @@
 import * as vscode from "vscode";
 import { LanguageConfiguration } from "./languageConfiguration";
 import { activate as activateLogging, errorWrapper, log } from "./logging";
-import { activate as activateSchemaModel } from "./SchemaModel";
+import { activate as activateSchemaIndex } from "./SchemaIndex";
 import { activate as activateCommands } from "./commands";
 
 export async function activate(context: vscode.ExtensionContext) {
   const languageConfig = new LanguageConfiguration();
 
   activateLogging(context);
-  const schemaModel = activateSchemaModel(context);
+  const schemaModel = activateSchemaIndex(context);
   activateCommands(context, schemaModel, languageConfig);
 
   // TODO:

@@ -33,6 +33,12 @@ import { exists, getFs } from "@lib/fsShim";
 
 const fs = getFs();
 
+export function activate(context: vscode.ExtensionContext) {
+  const schemaIndex = new SchemaIndex();
+  context.subscriptions.push(schemaIndex);
+  return schemaIndex;
+}
+
 async function findRootAndSchema(uri: vscode.Uri) {
   const { workspaceFolders } = vscode.workspace;
   const saveRoot = await findSaveRoot(
@@ -131,9 +137,9 @@ export class SchemaIndex {
     return schemaMap;
   }
 
-  private delegateToModel<TInput, Fn>(
+  private delegateToModel<TInput>(
     uriSelector: (event: TInput) => vscode.Uri | undefined,
-    methodSelector: (model: SchemaModel) => Fn
+    methodSelector: (model: SchemaModel) => (event: TInput) => unknown
   ) {
     return async (event: TInput) => {
       const uri = uriSelector(event);
@@ -141,7 +147,7 @@ export class SchemaIndex {
         return () => {};
       }
       const model = await this.getSchemaRoot(uri);
-      return methodSelector(model);
+      return methodSelector(model)(event);
     };
   }
 
@@ -329,8 +335,14 @@ class SchemaModel {
     // For every change in the document, update the comment/code ranges in the schema
     // similar prior art: https://github.com/Dart-Code/Dart-Code/blob/d996c73d6a455135b8e532ac266ef1f33704b0e7/src/decorations/hot_reload_coverage_decorations.ts#L72-L83
     // TODO: this is buggy, how did vs code do it?
+    // search for 'acceptChanges' in IntervalTree.ts
+    // it's also used for multicursor tracking and decorations for search results
+    // https://github.com/microsoft/vscode/blob/3e407526a1e2ff22cacb69c7e353e81a12f41029/src/vs/editor/common/model/intervalTree.ts#L278
     for (const change of changes) {
       const cr = change.range;
+      // range/rangeOffset/rangeLength = the old text that is replaced
+      // text = the new text instead of that
+      // otherwise how do I know which source ranges need to be updated?
       const linesAdded = countNewLines(change.text);
       const lastLineChars = lastLineLength(change.text);
       for (const sr of this.getSchemaRangesByFile(uri.toString())) {
