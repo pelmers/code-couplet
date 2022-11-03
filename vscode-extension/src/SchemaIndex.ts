@@ -27,7 +27,9 @@ import {
   copySchema,
   countNewLines,
   EMPTY_SCHEMA_HASH,
+  findOverlappingRanges,
   lastLineLength,
+  updateNonOverlappingComments,
 } from "./schemaTools";
 import { exists, getFs } from "@lib/fsShim";
 
@@ -36,15 +38,13 @@ const fs = getFs();
 export function activate(context: vscode.ExtensionContext) {
   const schemaIndex = new SchemaIndex();
   context.subscriptions.push(schemaIndex);
+  if (vscode.window.activeTextEditor) {
+    schemaIndex.decorateByEditor(vscode.window.activeTextEditor);
+  }
   return schemaIndex;
 }
 
-async function findRootAndSchema(uri: vscode.Uri) {
-  const { workspaceFolders } = vscode.workspace;
-  const saveRoot = await findSaveRoot(
-    uri,
-    (workspaceFolders || []).map((ws) => ws.uri)
-  );
+async function loadSchemaOrEmpty(saveRoot: vscode.Uri, uri: vscode.Uri) {
   const currentSchema = await loadSchema(saveRoot, uri);
   if (currentSchema == null) {
     return { schema: emptySchema(), saveRoot, hash: EMPTY_SCHEMA_HASH };
@@ -117,7 +117,7 @@ export class SchemaIndex {
 
   private async loadExistingSchemas(rootUri: vscode.Uri) {
     const schemaFolderUri = buildSchemaPath(rootUri);
-    const schemaMap = new Map();
+    const schemaMap: Map<string, CurrentFile> = new Map();
     if (!(await exists(schemaFolderUri))) {
       return schemaMap;
     }
@@ -130,7 +130,7 @@ export class SchemaIndex {
         const sourceUri = schemaFileUriToSourceUri(schemaUri);
         schemaMap.set(
           sourceUri.toString(),
-          await e(loadSchema)(rootUri, sourceUri)
+          (await e(loadSchema, { rethrow: true })(rootUri, sourceUri))!.schema
         );
       }
     }
@@ -151,9 +151,9 @@ export class SchemaIndex {
     };
   }
 
-  async loadSchemaByUri(uri: vscode.Uri, params: { checkHash: boolean }) {
+  async getSchemaByUri(uri: vscode.Uri) {
     const model = await this.getSchemaRoot(uri);
-    return model.loadSchemaByUri(uri, params);
+    return model.getSchemaByUri(uri);
   }
 
   async saveSchemaByUri(
@@ -281,23 +281,6 @@ class SchemaModel {
     return this.schemaMap.get(uri.toString())!;
   }
 
-  loadSchemaByUri = e(
-    async (uri: vscode.Uri, params: { checkHash: boolean }) => {
-      const { schema, hash } = await findRootAndSchema(uri);
-      if (params.checkHash && this.lastSeenSchemaHashes.has(uri.toString())) {
-        const lastSeenHash = this.lastSeenSchemaHashes.get(uri.toString());
-        if (lastSeenHash !== hash) {
-          throw new Error(
-            `schema for ${uri.toString()} changed outside editor`
-          );
-        }
-      }
-      this.lastSeenSchemaHashes.set(uri.toString(), hash);
-      return schema;
-    },
-    { rethrow: true }
-  );
-
   saveSchemaByUri = e(
     async (
       uri: vscode.Uri,
@@ -305,7 +288,10 @@ class SchemaModel {
       params: { checkHash: boolean }
     ) => {
       this.unsavedSchemaUris.delete(uri.toString());
-      const { saveRoot, hash: currentHash } = await findRootAndSchema(uri);
+      const { saveRoot, hash: currentHash } = await loadSchemaOrEmpty(
+        this.rootUri,
+        uri
+      );
       if (params.checkHash && this.lastSeenSchemaHashes.has(uri.toString())) {
         const lastSeenHash = this.lastSeenSchemaHashes.get(uri.toString());
         if (lastSeenHash !== currentHash) {
@@ -332,54 +318,26 @@ class SchemaModel {
     changes: readonly vscode.TextDocumentContentChangeEvent[]
   ) => {
     let wasUpdated = false;
-    // For every change in the document, update the comment/code ranges in the schema
-    // similar prior art: https://github.com/Dart-Code/Dart-Code/blob/d996c73d6a455135b8e532ac266ef1f33704b0e7/src/decorations/hot_reload_coverage_decorations.ts#L72-L83
     // TODO: this is buggy, how did vs code do it?
     // search for 'acceptChanges' in IntervalTree.ts
     // it's also used for multicursor tracking and decorations for search results
     // https://github.com/microsoft/vscode/blob/3e407526a1e2ff22cacb69c7e353e81a12f41029/src/vs/editor/common/model/intervalTree.ts#L278
     for (const change of changes) {
-      const cr = change.range;
-      // range/rangeOffset/rangeLength = the old text that is replaced
-      // text = the new text instead of that
-      // otherwise how do I know which source ranges need to be updated?
-      const linesAdded = countNewLines(change.text);
-      const lastLineChars = lastLineLength(change.text);
-      for (const sr of this.getSchemaRangesByFile(uri.toString())) {
-        // If change.range is strictly before schemaRange, then shorten schema range
-        if (
-          cr.end.line < sr.start.line ||
-          (cr.end.line === sr.start.line && cr.end.character <= sr.start.char)
-        ) {
-          // Move start and end line by offset of removed lines (where offset = added - removed)
-          const lineOffset = linesAdded - (cr.end.line - cr.start.line);
-          sr.start.line += lineOffset;
-          sr.end.line += lineOffset;
-          dlog(`Line offset is ${lineOffset}`);
-          if (cr.end.line === sr.start.line) {
-            // Something was removed before the start of the schema range on the same line,
-            // so move the start char by the calculated offset
-            const charOffset =
-              lastLineChars - (cr.end.character - cr.start.character);
-            sr.start.char += charOffset;
-            // If the range is only on one line, then we move the end too
-            if (sr.start.line === sr.end.line) {
-              sr.end.char += charOffset;
-            }
-            dlog(`Char offset is ${charOffset}`);
-          }
-          wasUpdated = true;
-        } else {
-          dlog("Change range overlaps schema range", cr, sr);
-        }
-        // TODO: what happens if the change range overlaps the schema range?
+      const schemaComments = this.getSchemaRangesByFile(uri.toString());
+      // 1. collect overlapping comments
+      const schemaRangesOfInterest = findOverlappingRanges(
+        change,
+        schemaComments
+      );
+      if (schemaRangesOfInterest.length > 1) {
+        dlog(`Found ${schemaRangesOfInterest.length} overlapping ranges`);
       }
+      // 2. shift non-overlapping comments
+      wasUpdated =
+        wasUpdated ||
+        updateNonOverlappingComments(change, schemaComments).wasUpdated;
+      // TODO: 3. update overlapping comments
     }
-    dlog(`Processed ${changes.length} pending changes for ${uri.toString()}`);
-    // TODO: sanity check, what if some of the new ranges are out of bounds?
-    // TODO: or maybe some end < start somewhere?
-    // TODO: recheck the document, for any schema ranges now incorrect, try to fix them
-    // TODO: if we can't fix them, then reset to the original
     return { wasUpdated };
   };
 

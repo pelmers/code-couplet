@@ -60,9 +60,7 @@ class Commands {
     codeRange: vscode.Range
   ): Promise<{ status: string; comment: CurrentComment }> {
     const { uri } = editor.document;
-    const schema = (await this.schemaIndex.loadSchemaByUri(uri, {
-      checkHash: true,
-    }))!;
+    const schema = (await this.schemaIndex.getSchemaByUri(uri))!;
     const commentConfig = await config.GetCommentConfiguration(
       editor.document.languageId
     );
@@ -120,9 +118,8 @@ class Commands {
   ): Promise<
     { status: "removed"; saveUri: vscode.Uri } | { status: "not found" }
   > {
-    const schema = (await this.schemaIndex.loadSchemaByUri(
-      editor.document.uri,
-      { checkHash: true }
+    const schema = (await this.schemaIndex.getSchemaByUri(
+      editor.document.uri
     ))!;
     if (editor.document.isDirty) {
       throw new Error(

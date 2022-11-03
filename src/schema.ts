@@ -112,8 +112,8 @@ export function buildSchemaPath(saveRoot: URI, sourceURI?: URI): URI {
     return Utils.joinPath(saveRoot, KNOWN_FOLDER_NAME);
   }
   let sourcePath = sourceURI.path;
-  // Remove the first part of sourcePath which overlaps saveRoot
-  sourcePath = sourcePath.slice(saveRoot.path.length);
+  // Remove the first part of sourcePath which overlaps saveRoot and the trailing slash
+  sourcePath = sourcePath.slice(saveRoot.path.length + 1);
   const transformedSourcePath =
     sourcePath.replace(/\//g, PATH_TRANSFORM_FRAGMENT) + ".json";
   return Utils.joinPath(saveRoot, KNOWN_FOLDER_NAME, transformedSourcePath);
@@ -121,14 +121,16 @@ export function buildSchemaPath(saveRoot: URI, sourceURI?: URI): URI {
 
 export function schemaFileUriToSourceUri(schemaFileUri: URI) {
   const sourcePath = schemaFileUri.path
-    .slice(schemaFileUri.path.lastIndexOf(KNOWN_FOLDER_NAME) + 1)
+    .slice(
+      KNOWN_FOLDER_NAME.length +
+        schemaFileUri.path.lastIndexOf(KNOWN_FOLDER_NAME) +
+        1
+    )
     .replace(/\.json$/, "")
     .replace(new RegExp(PATH_TRANSFORM_FRAGMENT, "g"), "/");
-  return URI.from({
-    scheme: schemaFileUri.scheme,
-    authority: schemaFileUri.authority,
-    path: sourcePath,
-  });
+  // The schema file is in the folder under the root, so go up one more to reach root
+  const saveRoot = Utils.dirname(Utils.dirname(schemaFileUri));
+  return Utils.joinPath(saveRoot, sourcePath);
 }
 
 // Save the comment schema to its map file, returns the URI of the saved path.
@@ -151,7 +153,7 @@ export async function saveSchema(
 export async function loadSchema(
   saveRoot: URI,
   sourceFilePath: URI
-): Promise<{ schema: TFile; hash: string } | null> {
+): Promise<{ schema: CurrentFile; hash: string } | null> {
   const schemaPath = buildSchemaPath(saveRoot, sourceFilePath);
   if (!(await exists(schemaPath))) {
     return null;
@@ -164,7 +166,7 @@ export async function loadSchema(
     throw new Error(`Could not decode schema at ${sourceFilePath.path}`);
   }
   return {
-    schema: validation.right,
+    schema: migrateToLatestFormat(validation.right),
     hash: crypto.createHash("md5").update(contents).digest("hex"),
   };
 }
