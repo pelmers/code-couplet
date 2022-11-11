@@ -37,16 +37,16 @@ class Commands {
   ) {
     this.disposable = vscode.Disposable.from(
       // 1. register command to couple code + comments
-      vscode.commands.registerCommand("code-couplet-vscode.linkSelection", () =>
-        e(this.autoLinkSelectionCommand, {
-          showErrorMessage: true,
-          errorPrefix: "Link Selection Command",
-        })()
+      vscode.commands.registerCommand(
+        "code-couplet-vscode.autoLinkSelection",
+        () =>
+          e(this.autoLinkSelectionCommand, {
+            showErrorMessage: true,
+            errorPrefix: "AutoLink Selection Command",
+          })()
       ),
       // TODO:
       // 1b. register command to manually link comment, then manually select code
-      // TODO:
-      // 1c. register command to remove a linked comment and code
       vscode.commands.registerCommand("code-couplet-vscode.removeLink", () =>
         e(this.removeLinkedCommentCommand, {
           showErrorMessage: true,

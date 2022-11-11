@@ -13,27 +13,33 @@ import {
   saveSchema,
   schemaFileUriToSourceUri,
 } from "@lib/schema";
-import { dlog, errorWrapper as e, log } from "./logging";
-import { PROJECT_NAME } from "@lib/constants";
 import {
-  CurrentFile,
-  emptySchema,
-  Range as SchemaRange,
-  CurrentComment,
-} from "@lib/types";
+  dlog,
+  errorWrapper as e,
+  errorWrapperStrict as eStrict,
+  log,
+} from "./logging";
+import { PROJECT_NAME } from "@lib/constants";
+import { CurrentFile, emptySchema } from "@lib/types";
 import { decorate } from "./decorations";
 import { getDiagnostics } from "./diagnostics";
 import {
-  copySchema,
-  countNewLines,
   EMPTY_SCHEMA_HASH,
   findOverlappingRanges,
-  lastLineLength,
   updateNonOverlappingComments,
 } from "./schemaTools";
 import { exists, getFs } from "@lib/fsShim";
 
 const fs = getFs();
+
+type SchemaMap = Map<
+  string,
+  {
+    schema: CurrentFile;
+    hash: string;
+    hasUnsavedChanges: boolean;
+  }
+>;
 
 export function activate(context: vscode.ExtensionContext) {
   const schemaIndex = new SchemaIndex();
@@ -117,7 +123,7 @@ export class SchemaIndex {
 
   private async loadExistingSchemas(rootUri: vscode.Uri) {
     const schemaFolderUri = buildSchemaPath(rootUri);
-    const schemaMap: Map<string, CurrentFile> = new Map();
+    const schemaMap: SchemaMap = new Map();
     if (!(await exists(schemaFolderUri))) {
       return schemaMap;
     }
@@ -128,10 +134,15 @@ export class SchemaIndex {
       if (fileType === vscode.FileType.File) {
         const schemaUri = vscode.Uri.joinPath(schemaFolderUri, schemaName);
         const sourceUri = schemaFileUriToSourceUri(schemaUri);
-        schemaMap.set(
-          sourceUri.toString(),
-          (await e(loadSchema, { rethrow: true })(rootUri, sourceUri))!.schema
+        const { schema, hash } = await eStrict(loadSchemaOrEmpty)(
+          rootUri,
+          sourceUri
         );
+        schemaMap.set(sourceUri.toString(), {
+          schema,
+          hash,
+          hasUnsavedChanges: false,
+        });
       }
     }
     return schemaMap;
@@ -153,7 +164,7 @@ export class SchemaIndex {
 
   async getSchemaByUri(uri: vscode.Uri) {
     const model = await this.getSchemaRoot(uri);
-    return model.getSchemaByUri(uri);
+    return model.getSchemaByUri(uri).schema;
   }
 
   async saveSchemaByUri(
@@ -162,7 +173,7 @@ export class SchemaIndex {
     params: { checkHash: boolean }
   ) {
     const model = await this.getSchemaRoot(uri);
-    return (await model.saveSchemaByUri(uri, schema, params))!;
+    return await model.saveSchemaByUri(uri, schema, params);
   }
 
   async decorateByEditor(editor: vscode.TextEditor) {
@@ -190,15 +201,9 @@ class SchemaModel {
   // Diagnostic collection where we set all diagnostics for all documents
   diagnosticCollection: vscode.DiagnosticCollection =
     vscode.languages.createDiagnosticCollection(PROJECT_NAME);
-  // Map of schema uri toString to hash of schema file contents when we last loaded it (e.g. for decorations)
-  // A hash of "0" indicates it's a new file with an empty schema
-  lastSeenSchemaHashes: Map<string, string> = new Map();
 
   // This map serializes saving and loading on each file to fix races, e.g. willSave vs. save
   ioSerializationPromises: Map<string, Promise<unknown>> = new Map();
-
-  // This set stores the uris of files whose schemas need to be saved because they changed
-  unsavedSchemaUris: Set<string> = new Set();
 
   // TODO: Question: should we colorize each pair differently? Or same color for all texts?
   commentDecorationType = vscode.window.createTextEditorDecorationType({
@@ -215,7 +220,7 @@ class SchemaModel {
 
   constructor(
     private rootUri: vscode.Uri,
-    private schemaMap: Map<string, CurrentFile> = new Map()
+    private schemaMap: SchemaMap = new Map()
   ) {
     this.disposable = vscode.Disposable.from();
     // TODO: the file watcher would go here
@@ -227,7 +232,7 @@ class SchemaModel {
     const ranges = [];
     for (const [sourceUriString, file] of this.schemaMap) {
       const sourceUri = vscode.Uri.parse(sourceUriString);
-      for (const comment of file.comments) {
+      for (const comment of file.schema.comments) {
         if (sourceUriString === fileUri) {
           ranges.push(comment.commentRange);
         }
@@ -240,7 +245,10 @@ class SchemaModel {
   }
 
   publishDiagnostics(doc: vscode.TextDocument) {
-    const diagnostics = getDiagnostics(doc, this.getSchemaByUri(doc.uri));
+    const diagnostics = getDiagnostics(
+      doc,
+      this.getSchemaByUri(doc.uri).schema
+    );
     if (diagnostics.length > 0) {
       log(
         `Publishing ${diagnostics.length} diagnostics for ${doc.uri.toString()}`
@@ -281,41 +289,42 @@ class SchemaModel {
 
   getSchemaByUri(uri: vscode.Uri) {
     if (!this.schemaMap.has(uri.toString())) {
-      this.schemaMap.set(uri.toString(), emptySchema());
+      this.schemaMap.set(uri.toString(), {
+        schema: emptySchema(),
+        hash: EMPTY_SCHEMA_HASH,
+        hasUnsavedChanges: false,
+      });
     }
     return this.schemaMap.get(uri.toString())!;
   }
 
-  saveSchemaByUri = e(
+  saveSchemaByUri = eStrict(
     async (
       uri: vscode.Uri,
       schema: CurrentFile,
       params: { checkHash: boolean }
     ) => {
-      this.unsavedSchemaUris.delete(uri.toString());
       const { saveRoot, hash: currentHash } = await loadSchemaOrEmpty(
         this.rootUri,
         uri
       );
-      if (params.checkHash && this.lastSeenSchemaHashes.has(uri.toString())) {
-        const lastSeenHash = this.lastSeenSchemaHashes.get(uri.toString());
-        if (lastSeenHash !== currentHash) {
-          throw new Error(
-            `schema for ${uri.toString()} changed outside editor`
-          );
-        }
+      const lastSeenHash = this.getSchemaByUri(uri).hash;
+      if (params.checkHash && lastSeenHash !== currentHash) {
+        throw new Error(`schema for ${uri.toString()} changed outside editor`);
       }
-      this.schemaMap.set(uri.toString(), schema);
       const { saveUri, hash: newHash } = await saveSchema(
         saveRoot,
         uri,
         schema
       );
-      this.lastSeenSchemaHashes.set(uri.toString(), newHash);
+      this.schemaMap.set(uri.toString(), {
+        schema,
+        hash: newHash,
+        hasUnsavedChanges: false,
+      });
       dlog(`Saved schema to ${saveUri.toString()}`);
       return saveUri;
-    },
-    { rethrow: true }
+    }
   );
 
   updateSchemaFromPendingChanges = (
@@ -349,7 +358,7 @@ class SchemaModel {
   decorateByEditor(editor: vscode.TextEditor) {
     const doc = editor.document;
     if (!doc.isDirty) {
-      const { comments } = this.getSchemaByUri(doc.uri);
+      const { comments } = this.getSchemaByUri(doc.uri).schema;
       decorate(
         editor,
         comments,
@@ -366,7 +375,7 @@ class SchemaModel {
       event.contentChanges
     );
     if (wasUpdated) {
-      this.unsavedSchemaUris.add(uri.toString());
+      this.getSchemaByUri(uri).hasUnsavedChanges = true;
     }
   };
 
@@ -375,9 +384,8 @@ class SchemaModel {
       dlog("onDidSaveTextDocument", doc.uri.toString());
       // TODO: what happens if a plugin like prettier changes the text in their own save handler?
       // TODO: if there's no changes then just return here
-      const schema = this.getSchemaByUri(doc.uri);
-      if (this.unsavedSchemaUris.has(doc.uri.toString())) {
-        // TODO: work harder to make sure comments with isTracked = true are consistent
+      const { schema, hasUnsavedChanges } = this.getSchemaByUri(doc.uri);
+      if (hasUnsavedChanges) {
         await this.saveSchemaByUri(doc.uri, schema, { checkHash: true });
       }
       this.publishDiagnostics(doc);

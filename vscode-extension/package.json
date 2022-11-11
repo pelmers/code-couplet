@@ -19,8 +19,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "code-couplet-vscode.linkSelection",
-        "title": "Code Couplet: Link Selection"
+        "command": "code-couplet-vscode.autoLinkSelection",
+        "title": "Code Couplet: AutoLink Selection"
       },
       {
         "command": "code-couplet-vscode.removeLink",

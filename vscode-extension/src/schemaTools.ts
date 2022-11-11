@@ -1,4 +1,4 @@
-import { findSaveRoot, loadSchema, migrateToLatestFormat } from "@lib/schema";
+import { findSaveRoot, migrateToLatestFormat } from "@lib/schema";
 import {
   CurrentComment,
   CurrentFile,
@@ -103,14 +103,13 @@ export function updateNonOverlappingComments(
   // charDelta = how much to shift all ranges ON the changed line (but AFTER the change)
   const charDelta = lastLineLength(change.text) - originalChars;
   for (const sr of schemaRanges) {
-    // TODO: all the comparisons should be done with the delta applied???
     if (sr.start.line > cr.end.line) {
       sr.start.line += lineDelta;
       sr.end.line += lineDelta;
       wasUpdated = true;
     } else if (
       sr.start.line === cr.end.line &&
-      // TODO: should be > or >= ?
+      // Greater than because ranges are inclusive on both ends
       sr.start.char > cr.end.character
     ) {
       sr.start.line += lineDelta;

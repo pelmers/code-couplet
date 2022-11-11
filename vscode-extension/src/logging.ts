@@ -27,12 +27,11 @@ export function dlog(...messages: unknown[]) {
  * Given func, return new function with the same signature that wraps any errors func throws
  * and shows them in a vscode info box and error console.
  */
-export function errorWrapper<TInput extends any[], TOutput>(
+export function errorWrapperStrict<TInput extends any[], TOutput>(
   func: (...args: TInput) => TOutput,
   params: {
     errorPrefix?: string;
     showErrorMessage?: boolean;
-    rethrow?: boolean;
   } = {}
 ) {
   return async (...args: TInput) => {
@@ -44,10 +43,28 @@ export function errorWrapper<TInput extends any[], TOutput>(
       if (params.showErrorMessage) {
         vscode.window.showErrorMessage(message);
       }
-      log(message);
-      if (params.rethrow) {
-        throw e;
-      }
+      throw e;
+    }
+  };
+}
+
+/**
+ * Given func, return new function with the same signature that wraps any errors func throws
+ * and shows them in a vscode info box and error console.
+ */
+export function errorWrapper<TInput extends any[], TOutput>(
+  func: (...args: TInput) => TOutput,
+  params: {
+    errorPrefix?: string;
+    showErrorMessage?: boolean;
+  } = {}
+) {
+  const strictFunc = errorWrapperStrict(func, params);
+  return async (...args: TInput) => {
+    try {
+      return await strictFunc(...args);
+    } catch (e) {
+      return null;
     }
   };
 }
