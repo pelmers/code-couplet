@@ -3,7 +3,7 @@ import { LanguageConfiguration } from "./languageConfiguration";
 import { findSingleLineComments } from "./commentParser";
 
 import { PROJECT_NAME } from "@lib/constants";
-import { getCodeRelativePath, saveSchema } from "@lib/schema";
+import { getCodeRelativePath } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
 import { vscodeRangeToSchema, pos } from "./typeConverters";
 import { findIndexOfMatchingRanges, nextId } from "./schemaTools";
@@ -42,11 +42,17 @@ class Commands {
           showErrorMessage: true,
           errorPrefix: "Link Selection Command",
         })()
-      )
+      ),
       // TODO:
       // 1b. register command to manually link comment, then manually select code
       // TODO:
       // 1c. register command to remove a linked comment and code
+      vscode.commands.registerCommand("code-couplet-vscode.removeLink", () =>
+        e(this.removeLinkedCommentCommand, {
+          showErrorMessage: true,
+          errorPrefix: "Remove Link Command",
+        })()
+      )
     );
   }
 
@@ -96,7 +102,8 @@ class Commands {
       await this.schemaIndex.saveSchemaByUri(uri, schema, {
         checkHash: true,
       });
-      this.schemaIndex.decorateByEditor(editor);
+      await this.schemaIndex.decorateByEditor(editor);
+      await this.schemaIndex.publishDiagnostics(editor.document);
       return { status: "added", comment };
     } else {
       schema.comments[existingIndex].commentValue = commentValue;
@@ -104,7 +111,8 @@ class Commands {
       await this.schemaIndex.saveSchemaByUri(uri, schema, {
         checkHash: true,
       });
-      this.schemaIndex.decorateByEditor(editor);
+      await this.schemaIndex.decorateByEditor(editor);
+      await this.schemaIndex.publishDiagnostics(editor.document);
       return { status: "updated", comment: schema.comments[existingIndex] };
     }
   }
@@ -139,7 +147,8 @@ class Commands {
           checkHash: true,
         }
       );
-      this.schemaIndex.decorateByEditor(editor);
+      await this.schemaIndex.decorateByEditor(editor);
+      await this.schemaIndex.publishDiagnostics(editor.document);
       return { saveUri, status: "removed" };
     }
   }
@@ -260,6 +269,46 @@ class Commands {
         const { status } = result;
         vscode.window.setStatusBarMessage(`Comment link: ${status}`, 4000);
       }
+    }
+  };
+
+  removeLinkedCommentCommand = async () => {
+    // Get the list of links in the current file
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+    const { uri } = editor.document;
+    const schema = await this.schemaIndex.getSchemaByUri(uri);
+    if (!schema) {
+      return;
+    }
+    if (schema.comments.length === 0) {
+      throw new Error("No comments found in this file");
+    }
+    // Show the list of comments in a quickpick menu, with the corresponding code value as detail
+    const commentItems = schema.comments.map((comment) => {
+      const { commentRange, commentValue, codeValue, id } = comment;
+      return {
+        label: `Line ${commentRange.start.line + 1}: ${commentValue}`,
+        detail: codeValue,
+        comment,
+      };
+    });
+    const selectedComment = await vscode.window.showQuickPick(commentItems, {
+      placeHolder: "Select a comment to remove",
+    });
+    if (!selectedComment) {
+      return;
+    }
+    const { status } = await this.removeCommentFromSchema(
+      editor,
+      selectedComment.comment
+    );
+    if (status === "removed") {
+      vscode.window.setStatusBarMessage(`Comment link: ${status}`, 4000);
+    } else {
+      throw new Error(`could not remove comment link: ${status}`);
     }
   };
 

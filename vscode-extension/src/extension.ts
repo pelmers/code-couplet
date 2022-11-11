@@ -18,9 +18,12 @@ export async function activate(context: vscode.ExtensionContext) {
   // - remove comment
   // - jump to manually edit schema file
 
-  // TODO:
+  // DONE:
   // 3. during editing, annotate linked regions with some color or decoration
   // e.g. https://vscode.rocks/decorations/
+
+  // TODO:
+  // 4. when hovering over a linked region, show a tooltip with the counterpart
 
   // TODO:
   // what if you're editing some other part of a file and the comment moves,

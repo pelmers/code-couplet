@@ -12,7 +12,8 @@
   "activationEvents": [
     "*",
     "onCommand:TODO_remove_this_*_activation",
-    "onCommand:code-couplet-vscode.linkSelection"
+    "onCommand:code-couplet-vscode.linkSelection",
+    "onCommand:code-couplet-vscode.removeLink"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -20,6 +21,10 @@
       {
         "command": "code-couplet-vscode.linkSelection",
         "title": "Code Couplet: Link Selection"
+      },
+      {
+        "command": "code-couplet-vscode.removeLink",
+        "title": "Code Couplet: Remove Link"
       }
     ],
     "configuration": {

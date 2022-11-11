@@ -170,6 +170,11 @@ export class SchemaIndex {
     model.decorateByEditor(editor);
   }
 
+  async publishDiagnostics(doc: vscode.TextDocument) {
+    const model = await this.getSchemaRoot(doc.uri);
+    model.publishDiagnostics(doc);
+  }
+
   // TODO: implement all the document watching stuff
   dispose() {
     this.disposable.dispose();
@@ -373,7 +378,7 @@ class SchemaModel {
       const schema = this.getSchemaByUri(doc.uri);
       if (this.unsavedSchemaUris.has(doc.uri.toString())) {
         // TODO: work harder to make sure comments with isTracked = true are consistent
-        await this.saveSchemaByUri(doc.uri, schema!, { checkHash: true });
+        await this.saveSchemaByUri(doc.uri, schema, { checkHash: true });
       }
       this.publishDiagnostics(doc);
       // If the current active editor is the one that we just opened then re-render decorations

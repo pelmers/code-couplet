@@ -22,7 +22,6 @@ const CommentV1 = t.type({
   // The code range does not have to be in the same file.
   // It can be in a different file, and we find it by following the codeRelativePath.
   // The diagnostic then will only appear on the file that contains the comment.
-  // TODO: to implement this, we will need to do whole-project schema indexing
   codeRelativePath: t.string,
   codeRange: Range,
   codeValue: t.string,
