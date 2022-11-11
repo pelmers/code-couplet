@@ -13,14 +13,17 @@ const extensionConfig = {
   target: "node",
   mode: "none",
 
-  entry: "./src/extension.ts",
+  entry: {
+    extension: "./src/extension.ts",
+    testIndex: "./src/test/suite/index.ts",
+  },
   output: {
     path: path.resolve(__dirname, "dist"),
-    filename: "extension.js",
     libraryTarget: "commonjs2",
   },
   externals: {
     vscode: "commonjs vscode",
+    mocha: "commonjs mocha",
   },
   resolve: {
     // support reading TypeScript and JavaScript files, 📖 -> https://github.com/TypeStrong/ts-loader

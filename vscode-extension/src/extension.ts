@@ -11,9 +11,9 @@ export async function activate(context: vscode.ExtensionContext) {
   const schemaModel = activateSchemaIndex(context);
   activateCommands(context, schemaModel, languageConfig);
 
+  // DONE: 2. on save, invoke validation and display diagnostics
   // TODO:
-  // 2. on save, invoke validation and display diagnostics (w/ quick fixes)
-  // 2b. quick fix ideas:
+  // 2b. display quick fix ideas:
   // - update range of code / comment
   // - remove comment
   // - jump to manually edit schema file

@@ -32,15 +32,6 @@ import { exists, getFs } from "@lib/fsShim";
 
 const fs = getFs();
 
-type SchemaMap = Map<
-  string,
-  {
-    schema: CurrentFile;
-    hash: string;
-    hasUnsavedChanges: boolean;
-  }
->;
-
 export function activate(context: vscode.ExtensionContext) {
   const schemaIndex = new SchemaIndex();
   context.subscriptions.push(schemaIndex);
@@ -192,9 +183,18 @@ export class SchemaIndex {
   }
 }
 
+type SchemaMap = Map<
+  string,
+  {
+    schema: CurrentFile;
+    hash: string;
+    hasUnsavedChanges: boolean;
+  }
+>;
+
 // Class which handles operations for given project root.
-// Watches project roots for changes to schema files.
 // Handles document opens, saves, and changes to files under this root.
+// TODO: Watches project roots for changes to schema files.
 class SchemaModel {
   disposable: vscode.Disposable;
 

@@ -28,13 +28,13 @@
       "request": "launch",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/vscode-extension",
-        "--extensionTestsPath=${workspaceFolder}/vscode-extension/out/test/suite/index"
+        "--extensionTestsPath=${workspaceFolder}/vscode-extension/dist/testIndex"
       ],
       "outFiles": [
         "${workspaceFolder}/vscode-extension/out/**/*.js",
         "${workspaceFolder}/vscode-extension/dist/**/*.js"
       ],
-      "preLaunchTask": "tasks: watch-tests"
+      "preLaunchTask": "npm: build-extension"
     }
   ]
 }

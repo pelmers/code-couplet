@@ -17,6 +17,8 @@ const Range = t.type({
 export type Range = t.TypeOf<typeof Range>;
 
 const CommentV1 = t.type({
+  // TODO: should this be a list? right now we highlight the whole range,
+  // but that doesn't look great for multi line comments where we highlight all the leading whitespace
   commentValue: t.string,
   commentRange: Range,
   // The code range does not have to be in the same file.
