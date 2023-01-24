@@ -32,4 +32,6 @@ export async function activate(context: vscode.ExtensionContext) {
   // for the comment
   // note in the search: should ignore leading whitespace on each line
   // and there should be an upper limit on the file size to do this auto-fixing
+  // TODO: as a compromise, I think we can add a command to fix this on a per-comment basis
+  // can be done through the quick fix
 }

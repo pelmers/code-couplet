@@ -2,40 +2,33 @@ import * as vscode from "vscode";
 
 import { CurrentFile } from "@lib/types";
 import { PROJECT_NAME } from "@lib/constants";
-import { validate } from "@lib/validation";
+import { ErrorType, validate } from "@lib/validation";
 import { schemaRangeToVscode, vscodeDocumentToNode } from "./typeConverters";
 
-export function getDiagnostics(doc: vscode.TextDocument, schema: CurrentFile) {
-  // TODO: put the logic in src/validate.ts instead of implementing here
-  validate(vscodeDocumentToNode(doc), schema);
-  const diagnostics: vscode.Diagnostic[] = [];
-  for (const comment of schema!.comments) {
-    const commentRange = schemaRangeToVscode(comment.commentRange);
-    const codeRange = schemaRangeToVscode(comment.codeRange);
-    const commentText = doc.getText(commentRange);
-    const codeText = doc.getText(codeRange);
-    const makeDiagnostic = (range: vscode.Range, message: string) => ({
-      range,
+export async function getDiagnostics(
+  doc: vscode.TextDocument,
+  schema: CurrentFile
+): Promise<vscode.Diagnostic[]> {
+  const errors = await validate(vscodeDocumentToNode(doc), schema);
+  return errors.map((error) => {
+    let message: string;
+    if (error.errorType === ErrorType.CommentMismatch) {
+      message = `Comment text does not match schema. Expected: "${error.expected.comment}", got: "${error.actual.comment}"`;
+    } else if (error.errorType === ErrorType.CodeMismatch) {
+      message = `Code does not match schema. Expected: "${error.expected.code}", got: "${error.actual.code}"`;
+    } else if (error.errorType === ErrorType.BothMismatch) {
+      message = `Both code and comment do not match schema. Expected: "${error.expected.comment}", got: "${error.actual.comment}"`;
+    } else if (error.errorType === ErrorType.CommentMoved) {
+      message = `Text found but position changed. Use quick-fix to update schema automatically.`;
+    } else {
+      message = `Unknown error`;
+    }
+    return {
+      range: schemaRangeToVscode(error.commentRange),
       message,
       severity: vscode.DiagnosticSeverity.Error,
       source: PROJECT_NAME,
-      code: comment.id,
-    });
-    if (commentText !== comment.commentValue) {
-      diagnostics.push(
-        makeDiagnostic(
-          commentRange,
-          `Comment text does not match schema. Expected: "${comment.commentValue}", got: "${commentText}"`
-        )
-      );
-    } else if (codeText !== comment.codeValue) {
-      diagnostics.push(
-        makeDiagnostic(
-          codeRange,
-          `Code text does not match schema. Expected: "${comment.codeValue}", got: "${codeText}"`
-        )
-      );
-    }
-  }
-  return diagnostics;
+      code: error.commentId,
+    };
+  });
 }

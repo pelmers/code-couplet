@@ -110,7 +110,7 @@ export function updateNonOverlappingComments(
     } else if (
       sr.start.line === cr.end.line &&
       // Greater than because ranges are inclusive on both ends
-      sr.start.char > cr.end.character
+      sr.start.char >= cr.end.character
     ) {
       sr.start.line += lineDelta;
       sr.end.line += lineDelta;
@@ -125,7 +125,48 @@ export function updateNonOverlappingComments(
 }
 
 /**
- * Return a list of all range that overlap with the changed range
+ * Update schemaRanges in place such that all ranges overlapping the change event
+ * are shifted by the amount that was changed. Assumes that all ranges overlap the change.
+ */
+export function updateOverlappingComments(
+  change: vscode.TextDocumentContentChangeEvent,
+  overlappingRanges: SchemaRange[]
+) {
+  let wasUpdated = false;
+  // Similar to `nodeAcceptEdit` in vscode's intervalTree.ts
+  // TODO: definitely needs some debugging
+  for (const sr of overlappingRanges) {
+    // Is the whole sr deleted? If change start <= sr start and sr end <= change end
+    const isDeleted = change.range.contains(schemaRangeToVscode(sr));
+    // Then set the sr start and end to the change start
+    if (isDeleted) {
+      sr.start.line = change.range.start.line;
+      sr.start.char = change.range.start.character;
+      sr.end.line = change.range.start.line;
+      sr.end.char = change.range.start.character;
+      wasUpdated = true;
+      continue;
+    }
+    // Did the change overlap the start of the sr?
+    if (change.range.start.isBeforeOrEqual(pos(sr.start.line, sr.start.char))) {
+      // Then set the sr start to the change end
+      sr.start.line = change.range.end.line;
+      sr.start.char = change.range.end.character;
+      wasUpdated = true;
+    }
+    // Did the change overlap the end of the sr?
+    if (change.range.end.isAfterOrEqual(pos(sr.end.line, sr.end.char))) {
+      // Then set the sr end to the change start
+      sr.end.line = change.range.start.line;
+      sr.end.char = change.range.start.character;
+      wasUpdated = true;
+    }
+  }
+  return { wasUpdated };
+}
+
+/**
+ * Return a list of all ranges that overlap with the changed range
  */
 export function findOverlappingRanges(
   change: vscode.TextDocumentContentChangeEvent,

@@ -36,7 +36,8 @@ export function vscodeDocumentToNode(
     lineCount: doc.lineCount,
     getText: (range?: vscode.Range) => {
       if (range) {
-        return doc.getText(range);
+        // Really not sure why we get illegal argument exception if we don't add this wrapping
+        return doc.getText(new vscode.Range(range.start, range.end));
       } else {
         return doc.getText();
       }

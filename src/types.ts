@@ -17,8 +17,6 @@ const Range = t.type({
 export type Range = t.TypeOf<typeof Range>;
 
 const CommentV1 = t.type({
-  // TODO: should this be a list? right now we highlight the whole range,
-  // but that doesn't look great for multi line comments where we highlight all the leading whitespace
   commentValue: t.string,
   commentRange: Range,
   // The code range does not have to be in the same file.
@@ -28,12 +26,6 @@ const CommentV1 = t.type({
   codeRange: Range,
   codeValue: t.string,
   id: t.number,
-  // If a comment is marked as tracked, then if we lose it on edits, we will try to find it
-  // by scanning the document(s) again.
-  // Would be unnecesary if document edit following were better...
-  // When added by command, comments are tracked.
-  // If we lose track because we cannot uniquely identify it on document scan, mark it untracked.
-  isTracked: t.boolean,
 });
 type CommentV1 = t.TypeOf<typeof CommentV1>;
 

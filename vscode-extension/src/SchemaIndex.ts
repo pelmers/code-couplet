@@ -27,6 +27,7 @@ import {
   EMPTY_SCHEMA_HASH,
   findOverlappingRanges,
   updateNonOverlappingComments,
+  updateOverlappingComments,
 } from "./schemaTools";
 import { exists, getFs } from "@lib/fsShim";
 
@@ -174,7 +175,7 @@ export class SchemaIndex {
 
   async publishDiagnostics(doc: vscode.TextDocument) {
     const model = await this.getSchemaRoot(doc.uri);
-    model.publishDiagnostics(doc);
+    await model.publishDiagnostics(doc);
   }
 
   // TODO: implement all the document watching stuff
@@ -205,11 +206,9 @@ class SchemaModel {
   // This map serializes saving and loading on each file to fix races, e.g. willSave vs. save
   ioSerializationPromises: Map<string, Promise<unknown>> = new Map();
 
-  // TODO: Question: should we colorize each pair differently? Or same color for all texts?
   commentDecorationType = vscode.window.createTextEditorDecorationType({
     backgroundColor: "rgba(0, 255, 0, 0.2)",
     // Border doesn't look great because I like to draw the range to the first char of the next line
-    // TODO: if we want to include border then add logic to shorten range by 1 if they do that
     // border: "1px solid rgba(255, 255, 255, 0.5)",
   });
   codeDecorationType = vscode.window.createTextEditorDecorationType({
@@ -226,26 +225,39 @@ class SchemaModel {
     // TODO: the file watcher would go here
   }
 
-  // TODO: we may want to cache this since it's called on every edit
-  // TODO: cache would invalidate when any range is added or removed on given file
-  getSchemaRangesByFile(fileUri: string) {
-    const ranges = [];
-    for (const [sourceUriString, file] of this.schemaMap) {
-      const sourceUri = vscode.Uri.parse(sourceUriString);
-      for (const comment of file.schema.comments) {
-        if (sourceUriString === fileUri) {
-          ranges.push(comment.commentRange);
-        }
-        if (resolveCodePath(sourceUri, comment).toString() === fileUri) {
-          ranges.push(comment.codeRange);
-        }
-      }
+  getCommentReferencesByFile(fileUri: string) {
+    if (!this.schemaMap.has(fileUri)) {
+      return [];
     }
-    return ranges;
+    return this.schemaMap.get(fileUri)!.schema.comments;
   }
 
-  publishDiagnostics(doc: vscode.TextDocument) {
-    const diagnostics = getDiagnostics(
+  getCodeReferencesByFile(fileUri: string) {
+    const comments = [];
+    for (const [sourceUriString, file] of this.schemaMap) {
+      const sourceUri = vscode.Uri.parse(sourceUriString);
+      comments.push(
+        ...file.schema.comments.filter(
+          (comment) =>
+            resolveCodePath(sourceUri, comment).toString() === fileUri
+        )
+      );
+    }
+    return comments;
+  }
+
+  getSchemaRangesByFile(fileUri: string) {
+    return this.getCommentReferencesByFile(fileUri)
+      .map((comment) => comment.commentRange)
+      .concat(
+        this.getCodeReferencesByFile(fileUri).map(
+          (comment) => comment.codeRange
+        )
+      );
+  }
+
+  async publishDiagnostics(doc: vscode.TextDocument) {
+    const diagnostics = await getDiagnostics(
       doc,
       this.getSchemaByUri(doc.uri).schema
     );
@@ -350,7 +362,10 @@ class SchemaModel {
       wasUpdated =
         wasUpdated ||
         updateNonOverlappingComments(change, schemaComments).wasUpdated;
-      // TODO: 3. update overlapping comments
+
+      wasUpdated =
+        wasUpdated ||
+        updateOverlappingComments(change, schemaRangesOfInterest).wasUpdated;
     }
     return { wasUpdated };
   };
@@ -388,24 +403,24 @@ class SchemaModel {
       if (hasUnsavedChanges) {
         await this.saveSchemaByUri(doc.uri, schema, { checkHash: true });
       }
-      this.publishDiagnostics(doc);
       // If the current active editor is the one that we just opened then re-render decorations
       const { activeTextEditor } = vscode.window;
       if (activeTextEditor && activeTextEditor.document.uri === doc.uri) {
         this.decorateByEditor(activeTextEditor);
       }
+      await this.publishDiagnostics(doc);
     });
   };
 
   onDidOpenTextDocument = async (doc: vscode.TextDocument) => {
     dlog("onDidOpenTextDocument", doc.uri.toString());
     this.diagnosticCollection.delete(doc.uri);
-    this.publishDiagnostics(doc);
     // If the current active editor is the one that we just opened then re-render decorations
     const { activeTextEditor } = vscode.window;
     if (activeTextEditor && activeTextEditor.document.uri === doc.uri) {
       this.decorateByEditor(activeTextEditor);
     }
+    await this.publishDiagnostics(doc);
   };
 
   onDidChangeActiveEditor = async (editor: vscode.TextEditor | undefined) => {

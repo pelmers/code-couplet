@@ -30,6 +30,11 @@ function lastCharacterOfLine(
 
 class Commands {
   disposable: vscode.Disposable;
+  currentLinkContext: {
+    docUri: vscode.Uri;
+    commentRange: vscode.Range;
+    commentValue: string;
+  } | null = null;
 
   constructor(
     private schemaIndex: SchemaIndex,
@@ -45,12 +50,17 @@ class Commands {
             errorPrefix: "AutoLink Selection Command",
           })()
       ),
-      // TODO:
-      // 1b. register command to manually link comment, then manually select code
       vscode.commands.registerCommand("code-couplet-vscode.removeLink", () =>
         e(this.removeLinkedCommentCommand, {
           showErrorMessage: true,
           errorPrefix: "Remove Link Command",
+        })()
+      ),
+      // TODO: 1b. register command to manually link comment, then manually select code
+      vscode.commands.registerCommand("code-couplet-vscode.linkComment", () =>
+        e(this.linkCommentCommand, {
+          showErrorMessage: true,
+          errorPrefix: "Link Comment Command",
         })()
       )
     );
@@ -96,7 +106,6 @@ class Commands {
         commentValue,
         codeValue,
         id,
-        isTracked: true,
       };
       schema.comments.push(comment);
       await this.schemaIndex.saveSchemaByUri(uri, schema, {
@@ -272,6 +281,10 @@ class Commands {
     }
   };
 
+  /**
+   * VS Code command that shows a menu of all the comments in the current file
+   * Selecting a comment from the menu will remove it from the file's schema
+   */
   removeLinkedCommentCommand = async () => {
     // Get the list of links in the current file
     const editor = vscode.window.activeTextEditor;
@@ -310,6 +323,41 @@ class Commands {
     } else {
       throw new Error(`could not remove comment link: ${status}`);
     }
+  };
+
+  /**
+   * VS Code command that will set the current selection as a comment,
+   * then tell the user to select the corresponding code and run the link command
+   */
+  linkCommentCommand = async () => {
+    // First check that the selection is nonempty
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+    const { selection } = editor;
+    if (selection.isEmpty) {
+      if (this.currentLinkContext) {
+        this.currentLinkContext = null;
+        throw new Error("Nothing selected, aborting link operation");
+      } else {
+        throw new Error("Nothing selected, please select a comment");
+      }
+    } else if (this.currentLinkContext) {
+      // If the new selection identically matches the link, then abort
+      if (
+        this.currentLinkContext.commentRange.isEqual(selection) ||
+        this.currentLinkContext.docUri.toString() ===
+          editor.document.uri.toString()
+      ) {
+        this.currentLinkContext = null;
+        throw new Error("Selection identical to previous selection, aborting");
+      }
+    }
+    // If the current link context is empty then this is the first step,
+    // set the link context and tell the user to select the code and run the link command again
+    // the user can cancel the link operation by running the command again with nothing selected
+    // TODO
   };
 
   /**
