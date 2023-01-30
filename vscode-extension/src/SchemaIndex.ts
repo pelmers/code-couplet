@@ -398,7 +398,6 @@ class SchemaModel {
     this.guardIO(doc.uri, async () => {
       dlog("onDidSaveTextDocument", doc.uri.toString());
       // TODO: what happens if a plugin like prettier changes the text in their own save handler?
-      // TODO: if there's no changes then just return here
       const { schema, hasUnsavedChanges } = this.getSchemaByUri(doc.uri);
       if (hasUnsavedChanges) {
         await this.saveSchemaByUri(doc.uri, schema, { checkHash: true });

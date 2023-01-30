@@ -47,7 +47,6 @@ async function findClosestParentContainingFolder(
 export const findSaveRoot = async (
   sourceFilePath: URI,
   workspaceFolders?: URI[]
-  // TODO: add option to skip cache?
 ): Promise<URI> => {
   async function findRoot() {
     // Case 1: repo root

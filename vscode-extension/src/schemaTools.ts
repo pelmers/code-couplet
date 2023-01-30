@@ -14,8 +14,9 @@ export const EMPTY_SCHEMA_HASH = "0";
 
 export function findIndexOfMatchingRanges(
   schema: CurrentFile,
-  codeRange: vscode.Range,
-  commentRange: vscode.Range
+  commentRange: vscode.Range,
+  codeRange: vscode.Range
+  // TODO: check the code uri matches too
 ): number {
   return schema.comments.findIndex((comment) => {
     const existingCommentRange = schemaRangeToVscode(comment.commentRange);
@@ -134,7 +135,6 @@ export function updateOverlappingComments(
 ) {
   let wasUpdated = false;
   // Similar to `nodeAcceptEdit` in vscode's intervalTree.ts
-  // TODO: definitely needs some debugging
   for (const sr of overlappingRanges) {
     // Is the whole sr deleted? If change start <= sr start and sr end <= change end
     const isDeleted = change.range.contains(schemaRangeToVscode(sr));

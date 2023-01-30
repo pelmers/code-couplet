@@ -5,7 +5,11 @@ import { findSingleLineComments } from "./commentParser";
 import { PROJECT_NAME } from "@lib/constants";
 import { getCodeRelativePath } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
-import { vscodeRangeToSchema, pos } from "./typeConverters";
+import {
+  vscodeRangeToSchema,
+  pos,
+  fileToVscodeDocument,
+} from "./typeConverters";
 import { findIndexOfMatchingRanges, nextId } from "./schemaTools";
 import { log, errorWrapper as e } from "./logging";
 import { SchemaIndex } from "./SchemaIndex";
@@ -20,6 +24,11 @@ export function activate(
   context.subscriptions.push(commands);
 }
 
+type Location = {
+  uri: vscode.Uri;
+  range: vscode.Range;
+};
+
 function lastCharacterOfLine(
   document: vscode.TextDocument,
   line: number
@@ -28,11 +37,35 @@ function lastCharacterOfLine(
   return lastLine.range.end.character;
 }
 
+async function documentForUri(uri: vscode.Uri): Promise<vscode.TextDocument> {
+  // First see if vscode knows about the document
+  for (const doc of vscode.workspace.textDocuments) {
+    if (doc.uri.toString() === uri.toString()) {
+      return doc;
+    }
+  }
+  // Otherwise it's not open in the editor, export a TextDocument-compatible interface
+  return fileToVscodeDocument(uri);
+}
+
+function editorForUri(uri: vscode.Uri): vscode.TextEditor | undefined {
+  if (
+    vscode.window.activeTextEditor &&
+    vscode.window.activeTextEditor.document.uri.toString() === uri.toString()
+  ) {
+    return vscode.window.activeTextEditor;
+  }
+  for (const editor of vscode.window.visibleTextEditors) {
+    if (editor.document.uri.toString() === uri.toString()) {
+      return editor;
+    }
+  }
+}
+
 class Commands {
   disposable: vscode.Disposable;
   currentLinkContext: {
-    docUri: vscode.Uri;
-    commentRange: vscode.Range;
+    commentLocation: Location;
     commentValue: string;
   } | null = null;
 
@@ -56,11 +89,10 @@ class Commands {
           errorPrefix: "Remove Link Command",
         })()
       ),
-      // TODO: 1b. register command to manually link comment, then manually select code
-      vscode.commands.registerCommand("code-couplet-vscode.linkComment", () =>
+      vscode.commands.registerCommand("code-couplet-vscode.linkSelection", () =>
         e(this.linkCommentCommand, {
           showErrorMessage: true,
-          errorPrefix: "Link Comment Command",
+          errorPrefix: "Link Comment",
         })()
       )
     );
@@ -70,17 +102,20 @@ class Commands {
    * Commit the linked sections to the map file by loading the existing one and then saving it
    */
   async commitNewRangeToMap(
-    editor: vscode.TextEditor,
     config: LanguageConfiguration,
-    commentRange: vscode.Range,
-    codeRange: vscode.Range
+    commentLocation: Location,
+    codeLocation: Location
+    // TODO next: what if code is in another file lol
   ): Promise<{ status: string; comment: CurrentComment }> {
-    const { uri } = editor.document;
-    const schema = (await this.schemaIndex.getSchemaByUri(uri))!;
+    const commentDocument = await documentForUri(commentLocation.uri);
+    const codeDocument = await documentForUri(codeLocation.uri);
+    const schema = (await this.schemaIndex.getSchemaByUri(
+      commentLocation.uri
+    ))!;
     const commentConfig = await config.GetCommentConfiguration(
-      editor.document.languageId
+      commentDocument.languageId
     );
-    if (editor.document.isDirty) {
+    if (commentDocument.isDirty) {
       throw new Error(
         `Cannot link comment to code because of unsaved changes. Please save the document first.`
       );
@@ -89,40 +124,82 @@ class Commands {
     const lineComment = commentConfig?.lineComment;
     schema.configuration.lineComment = lineComment || null;
 
-    const commentValue = editor.document.getText(commentRange);
-    const codeValue = editor.document.getText(codeRange);
+    const commentValue = commentDocument.getText(commentLocation.range);
+    const codeValue = codeDocument.getText(codeLocation.range);
 
     const existingIndex = findIndexOfMatchingRanges(
       schema,
-      codeRange,
-      commentRange
+      commentLocation.range,
+      codeLocation.range
     );
     if (existingIndex == -1) {
       const id = nextId(schema);
       const comment = {
-        commentRange: vscodeRangeToSchema(commentRange),
-        codeRange: vscodeRangeToSchema(codeRange),
-        codeRelativePath: getCodeRelativePath(uri, uri),
+        commentRange: vscodeRangeToSchema(commentLocation.range),
+        codeRange: vscodeRangeToSchema(codeLocation.range),
+        codeRelativePath: getCodeRelativePath(
+          commentLocation.uri,
+          codeLocation.uri
+        ),
         commentValue,
         codeValue,
         id,
       };
       schema.comments.push(comment);
-      await this.schemaIndex.saveSchemaByUri(uri, schema, {
+      await this.schemaIndex.saveSchemaByUri(commentLocation.uri, schema, {
         checkHash: true,
       });
-      await this.schemaIndex.decorateByEditor(editor);
-      await this.schemaIndex.publishDiagnostics(editor.document);
+      const commentEditor = editorForUri(commentLocation.uri);
+      if (commentEditor) {
+        await this.schemaIndex.decorateByEditor(commentEditor);
+      }
+      await this.schemaIndex.publishDiagnostics(commentDocument);
       return { status: "added", comment };
     } else {
       schema.comments[existingIndex].commentValue = commentValue;
       schema.comments[existingIndex].codeValue = codeValue;
-      await this.schemaIndex.saveSchemaByUri(uri, schema, {
+      await this.schemaIndex.saveSchemaByUri(commentLocation.uri, schema, {
         checkHash: true,
       });
-      await this.schemaIndex.decorateByEditor(editor);
-      await this.schemaIndex.publishDiagnostics(editor.document);
+      const commentEditor = editorForUri(commentLocation.uri);
+      if (commentEditor) {
+        await this.schemaIndex.decorateByEditor(commentEditor);
+      }
+      await this.schemaIndex.publishDiagnostics(commentDocument);
       return { status: "updated", comment: schema.comments[existingIndex] };
+    }
+  }
+
+  /**
+   * Save link between given ranges and show a status message indicating success or failure
+   */
+  async commitNewRangeAndShowMessage(
+    commentLocation: Location,
+    codeLocation: Location
+  ) {
+    let result;
+    try {
+      result = await this.commitNewRangeToMap(
+        this.languageConfig,
+        commentLocation,
+        codeLocation
+      );
+    } catch (e) {
+      throw new Error(`could not save comment link: ${getErrorMessage(e)}`);
+    }
+
+    if (result) {
+      const showSuccessMessage = vscode.workspace
+        .getConfiguration(PROJECT_NAME)
+        .get<boolean>("showLinkingSuccessMessage");
+
+      if (showSuccessMessage) {
+        await this.showLinkingSuccessMessage(commentLocation.uri, result);
+      } else {
+        // Show a status bar message instead
+        const { status } = result;
+        vscode.window.setStatusBarMessage(`Comment link: ${status}`, 4000);
+      }
     }
   }
 
@@ -130,15 +207,14 @@ class Commands {
    * Remove the linked sections from the map file by loading the existing one and then saving it
    */
   async removeCommentFromSchema(
-    editor: vscode.TextEditor,
+    docUri: vscode.Uri,
     comment: CurrentComment
   ): Promise<
     { status: "removed"; saveUri: vscode.Uri } | { status: "not found" }
   > {
-    const schema = (await this.schemaIndex.getSchemaByUri(
-      editor.document.uri
-    ))!;
-    if (editor.document.isDirty) {
+    const document = await documentForUri(docUri);
+    const schema = (await this.schemaIndex.getSchemaByUri(docUri))!;
+    if (document.isDirty) {
       throw new Error(
         `Cannot remove link because of unsaved changes. Please save the document first.`
       );
@@ -149,15 +225,14 @@ class Commands {
       return { status: "not found" };
     } else {
       schema.comments.splice(existingIndex, 1);
-      const saveUri = await this.schemaIndex.saveSchemaByUri(
-        editor.document.uri,
-        schema,
-        {
-          checkHash: true,
-        }
-      );
-      await this.schemaIndex.decorateByEditor(editor);
-      await this.schemaIndex.publishDiagnostics(editor.document);
+      const saveUri = await this.schemaIndex.saveSchemaByUri(docUri, schema, {
+        checkHash: true,
+      });
+      const editor = editorForUri(docUri);
+      if (editor) {
+        await this.schemaIndex.decorateByEditor(editor);
+      }
+      await this.schemaIndex.publishDiagnostics(document);
       return { saveUri, status: "removed" };
     }
   }
@@ -254,31 +329,10 @@ class Commands {
     if (!codeRange) {
       throw new Error("no code block found in selection");
     }
-    let result;
-    try {
-      result = await this.commitNewRangeToMap(
-        editor,
-        this.languageConfig,
-        commentRange,
-        codeRange
-      );
-    } catch (e) {
-      throw new Error(`could not save comment link: ${getErrorMessage(e)}`);
-    }
-
-    if (result) {
-      const showSuccessMessage = vscode.workspace
-        .getConfiguration(PROJECT_NAME)
-        .get<boolean>("showLinkingSuccessMessage");
-
-      if (showSuccessMessage) {
-        await this.showLinkingSuccessMessage(editor, result);
-      } else {
-        // Show a status bar message instead
-        const { status } = result;
-        vscode.window.setStatusBarMessage(`Comment link: ${status}`, 4000);
-      }
-    }
+    await this.commitNewRangeAndShowMessage(
+      { range: commentRange, uri: editor.document.uri },
+      { range: codeRange, uri: editor.document.uri }
+    );
   };
 
   /**
@@ -315,7 +369,7 @@ class Commands {
       return;
     }
     const { status } = await this.removeCommentFromSchema(
-      editor,
+      uri,
       selectedComment.comment
     );
     if (status === "removed") {
@@ -335,6 +389,10 @@ class Commands {
     if (!editor) {
       return;
     }
+    // If the document is dirty then ask the user to save it first
+    if (editor.document.isDirty) {
+      throw new Error("Please save the document before linking comment");
+    }
     const { selection } = editor;
     if (selection.isEmpty) {
       if (this.currentLinkContext) {
@@ -346,8 +404,8 @@ class Commands {
     } else if (this.currentLinkContext) {
       // If the new selection identically matches the link, then abort
       if (
-        this.currentLinkContext.commentRange.isEqual(selection) ||
-        this.currentLinkContext.docUri.toString() ===
+        this.currentLinkContext.commentLocation.range.isEqual(selection) &&
+        this.currentLinkContext.commentLocation.uri.toString() ===
           editor.document.uri.toString()
       ) {
         this.currentLinkContext = null;
@@ -357,14 +415,33 @@ class Commands {
     // If the current link context is empty then this is the first step,
     // set the link context and tell the user to select the code and run the link command again
     // the user can cancel the link operation by running the command again with nothing selected
-    // TODO
+    if (!this.currentLinkContext) {
+      this.currentLinkContext = {
+        commentLocation: {
+          range: selection,
+          uri: editor.document.uri,
+        },
+        commentValue: editor.document.getText(selection),
+      };
+      await vscode.window.showInformationMessage(
+        "Comment selected, now select the corresponding code and run the link command again"
+      );
+    } else {
+      const { commentLocation } = this.currentLinkContext;
+      const codeLocation = {
+        range: selection,
+        uri: editor.document.uri,
+      };
+      this.currentLinkContext = null;
+      await this.commitNewRangeAndShowMessage(commentLocation, codeLocation);
+    }
   };
 
   /**
    * Shows a linking success info message with buttons to undo and never show again
    */
   async showLinkingSuccessMessage(
-    editor: vscode.TextEditor,
+    commentDocUri: vscode.Uri,
     result: { status: string; comment: CurrentComment }
   ) {
     const { status, comment } = result;
@@ -376,7 +453,10 @@ class Commands {
       neverAgain
     );
     if (choice === undo) {
-      const undoResult = await this.removeCommentFromSchema(editor, comment);
+      const undoResult = await this.removeCommentFromSchema(
+        commentDocUri,
+        comment
+      );
       if (undoResult.status == "not found") {
         throw new Error(`could not undo comment link: link not found`);
       } else {
