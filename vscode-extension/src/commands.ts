@@ -14,7 +14,7 @@ import { findIndexOfMatchingRanges, nextId } from "./schemaTools";
 import { log, errorWrapper as e } from "./logging";
 import { SchemaIndex } from "./SchemaIndex";
 import { CurrentComment } from "@lib/types";
-import { documentForUri, editorForUri, Location } from "./vscodeUtils";
+import { documentForUri, editorForUri } from "./vscodeUtils";
 
 export function activate(
   context: vscode.ExtensionContext,
@@ -36,7 +36,7 @@ function lastCharacterOfLine(
 class Commands {
   disposable: vscode.Disposable;
   currentLinkContext: {
-    commentLocation: Location;
+    commentLocation: vscode.Location;
     commentValue: string;
   } | null = null;
 
@@ -74,8 +74,8 @@ class Commands {
    */
   async commitNewRangeToMap(
     config: LanguageConfiguration,
-    commentLocation: Location,
-    codeLocation: Location
+    commentLocation: vscode.Location,
+    codeLocation: vscode.Location
     // TODO next: what if code is in another file lol
   ): Promise<{ status: string; comment: CurrentComment }> {
     const commentDocument = await documentForUri(commentLocation.uri);
@@ -148,8 +148,8 @@ class Commands {
    * Save link between given ranges and show a status message indicating success or failure
    */
   async commitNewRangeAndShowMessage(
-    commentLocation: Location,
-    codeLocation: Location
+    commentLocation: vscode.Location,
+    codeLocation: vscode.Location
   ) {
     let result;
     try {

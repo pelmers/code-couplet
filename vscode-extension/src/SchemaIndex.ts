@@ -31,6 +31,7 @@ import {
 } from "./schemaTools";
 import { exists, getFs } from "@lib/fsShim";
 import { fileToVscodeDocument } from "./typeConverters";
+import { documentForUri } from "./vscodeUtils";
 
 const fs = getFs();
 
@@ -120,7 +121,10 @@ export class SchemaIndex {
     const rootPath = rootUri.fsPath;
     if (!this.schemaModels.has(rootPath)) {
       const schemaMap = await this.loadExistingSchemas(rootUri);
-      this.schemaModels.set(rootPath, new SchemaModel(rootUri, schemaMap));
+      const model = new SchemaModel(rootUri, schemaMap);
+      this.schemaModels.set(rootPath, model);
+      // On first load, publish all diagnostics under this root
+      await model.publishAllDiagnostics();
     }
     return this.schemaModels.get(rootPath)!;
   }
@@ -234,7 +238,18 @@ class SchemaModel {
     private schemaMap: SchemaMap = new Map()
   ) {
     this.disposable = vscode.Disposable.from();
-    // TODO: the file watcher would go here
+    // TODO: the file watcher would go in that disposable
+  }
+
+  async publishAllDiagnostics() {
+    await Promise.all(
+      [...this.schemaMap.keys()].map(async (sourceUri) =>
+        this.publishDiagnostics(
+          await documentForUri(vscode.Uri.parse(sourceUri)),
+          false
+        )
+      )
+    );
   }
 
   getCommentReferencesByFile(fileUri: string) {
@@ -298,7 +313,7 @@ class SchemaModel {
           );
           if (comments.length > 0) {
             const sourceDoc = await fileToVscodeDocument(sourceUri);
-            await this.publishDiagnostics(sourceDoc, (recurse = false));
+            await this.publishDiagnostics(sourceDoc, false);
           }
         })
       );

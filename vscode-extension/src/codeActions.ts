@@ -50,42 +50,42 @@ class CodeActions {
     };
 
     for (const diag of ourDiagnostics) {
-      const error: ValidationError = JSON.parse(diag.code as string);
+      if (!diag.relatedInformation || diag.relatedInformation.length === 0) {
+        continue;
+      }
+      const codeLocation = diag.relatedInformation[0].location;
+      const error: {t: ErrorType, comment: string, code: string} = JSON.parse(
+        diag.relatedInformation[0].message as string
+      );
       // Available actions depend on the error type.
       // For text mismatches, offer to change schema to current value of the range.
       if (
-        error.errorType === ErrorType.CommentMismatch ||
-        error.errorType === ErrorType.BothMismatch
+        error.t === ErrorType.CommentMismatch ||
+        error.t === ErrorType.BothMismatch
       ) {
         codeActions.push(
           makeWorkspaceEditAction(
-            `Change comment to "${error.expected.comment}"`,
+            `Change comment to "${error.comment}"`,
             doc.uri,
             diag.range,
-            error.expected.comment
+            error.comment
           )
         );
       }
       if (
-        error.errorType === ErrorType.CodeMismatch ||
-        error.errorType === ErrorType.BothMismatch
+        error.t === ErrorType.CodeMismatch ||
+        error.t === ErrorType.BothMismatch
       ) {
         codeActions.push(
           makeWorkspaceEditAction(
-            `Change code to "${error.expected.code}"`,
-            vscode.Uri.parse(error.codeLocation.uriString),
-            schemaRangeToVscode(error.codeLocation.range),
-            error.expected.code
+            `Change code to "${error.code}"`,
+            codeLocation.uri,
+            codeLocation.range,
+            error.code
           )
         );
       }
-      if (error.moveFix) {
-        // TODO: If moveFix is available, offer to update schema to the found range.
-        const { start, end } = error.moveFix.commentRange;
-        log(
-          `Move fix at ${start.line}:${start.char} to ${end.line}:${end.char} available, not implemented yet`
-        );
-      }
+      // TODO: If moveFix is available, offer to update schema to the found range.
     }
     return codeActions;
   }

@@ -21,12 +21,23 @@ export async function getDiagnostics(
     } else {
       message = `Unknown error`;
     }
+    // Dear copilot, how can I add extra context into the diagnostic that is hidden from the user interface?
     return {
       range: schemaRangeToVscode(error.commentRange),
       message,
       severity: vscode.DiagnosticSeverity.Error,
       source: PROJECT_NAME,
-      code: JSON.stringify(error),
+      code: error.commentId,
+      // Pass along related info that tells the code action what were the expected values
+      relatedInformation: [
+        {
+          location: {
+            uri: error.codeLocation.uri,
+            range: schemaRangeToVscode(error.codeLocation.range),
+          },
+          message: JSON.stringify({t: error.errorType, ...error.expected}),
+        },
+      ],
     };
   });
 }

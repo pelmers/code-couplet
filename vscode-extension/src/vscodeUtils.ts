@@ -1,11 +1,6 @@
 import * as vscode from "vscode";
 import { fileToVscodeDocument } from "./typeConverters";
 
-export type Location = {
-  uri: vscode.Uri;
-  range: vscode.Range;
-};
-
 export async function documentForUri(
   uri: vscode.Uri
 ): Promise<vscode.TextDocument> {

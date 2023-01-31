@@ -20,7 +20,7 @@ export enum ErrorType {
 }
 
 type ValidationLocation = {
-  uriString: string;
+  uri: URI;
   range: SchemaRange;
 };
 
@@ -99,7 +99,7 @@ export async function validate(
       commentRange: comment.commentRange,
       errorType,
       codeLocation: {
-        uriString: codeUri.toString(),
+        uri: codeUri,
         range: comment.codeRange,
       },
       actual: {
