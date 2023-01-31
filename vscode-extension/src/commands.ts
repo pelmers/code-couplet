@@ -18,10 +18,10 @@ import { documentForUri, editorForUri } from "./vscodeUtils";
 
 export function activate(
   context: vscode.ExtensionContext,
-  SchemaIndex: SchemaIndex,
+  schemaIndex: SchemaIndex,
   languageConfig: LanguageConfiguration
 ) {
-  const commands = new Commands(SchemaIndex, languageConfig);
+  const commands = new Commands(schemaIndex, languageConfig);
   context.subscriptions.push(commands);
 }
 

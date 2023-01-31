@@ -35,7 +35,7 @@ export async function getDiagnostics(
             uri: error.codeLocation.uri,
             range: schemaRangeToVscode(error.codeLocation.range),
           },
-          message: JSON.stringify({t: error.errorType, ...error.expected}),
+          message: JSON.stringify({ t: error.errorType, ...error.expected }),
         },
       ],
     };

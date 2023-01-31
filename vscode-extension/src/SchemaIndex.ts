@@ -189,6 +189,11 @@ export class SchemaIndex {
     model.decorateByEditor(editor);
   }
 
+  async getAllCommentsByFile(uri: vscode.Uri) {
+    const model = await this.getSchemaRoot(uri);
+    return model.getAllCommentsByFile(uri.toString());
+  }
+
   async publishDiagnostics(doc: vscode.TextDocument) {
     const model = await this.getSchemaRoot(doc.uri);
     await model.publishDiagnostics(doc);

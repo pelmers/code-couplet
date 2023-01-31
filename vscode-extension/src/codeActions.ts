@@ -54,7 +54,7 @@ class CodeActions {
         continue;
       }
       const codeLocation = diag.relatedInformation[0].location;
-      const error: {t: ErrorType, comment: string, code: string} = JSON.parse(
+      const error: { t: ErrorType; comment: string; code: string } = JSON.parse(
         diag.relatedInformation[0].message as string
       );
       // Available actions depend on the error type.
