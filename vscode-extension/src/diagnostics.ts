@@ -18,8 +18,6 @@ export async function getDiagnostics(
       message = `Code does not match schema. Expected: "${error.expected.code}", got: "${error.actual.code}"`;
     } else if (error.errorType === ErrorType.BothMismatch) {
       message = `Both code and comment do not match schema. Expected: "${error.expected.comment}", got: "${error.actual.comment}"`;
-    } else if (error.errorType === ErrorType.CommentMoved) {
-      message = `Text found but position changed. Use quick-fix to update schema automatically.`;
     } else {
       message = `Unknown error`;
     }
@@ -28,7 +26,7 @@ export async function getDiagnostics(
       message,
       severity: vscode.DiagnosticSeverity.Error,
       source: PROJECT_NAME,
-      code: error.commentId,
+      code: JSON.stringify(error),
     };
   });
 }

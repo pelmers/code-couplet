@@ -17,14 +17,18 @@ export enum ErrorType {
   CodeMismatch,
   // Both the comment and code ranges do not match
   BothMismatch,
-  // The comment + code are somewhere else in the file
-  CommentMoved,
 }
+
+type ValidationLocation = {
+  uriString: string;
+  range: SchemaRange;
+};
 
 export type ValidationError = {
   commentId: number;
   // The range matches what is in the schema file
   commentRange: SchemaRange;
+  codeLocation: ValidationLocation;
   errorType: ErrorType;
   actual: {
     comment: string;
@@ -35,7 +39,7 @@ export type ValidationError = {
     code: string;
   };
   // Fix is only provided for moved comments
-  fix?: CurrentComment;
+  moveFix?: CurrentComment;
 };
 
 function convertRangeToVS(schemaRange: SchemaRange): VscodeRange {
@@ -69,7 +73,7 @@ export async function validate(
   doc: TextDocument,
   schema: CurrentFile
 ): Promise<ValidationError[]> {
-  const errors = [];
+  const errors: ValidationError[] = [];
 
   for (const comment of schema!.comments) {
     const commentText = doc.getText(convertRangeToVS(comment.commentRange));
@@ -90,10 +94,14 @@ export async function validate(
       codeText = codeDoc.getText(convertRangeToVS(comment.codeRange));
     }
 
-    const makeError = (errorType: ErrorType, fix?: CurrentComment) => ({
+    const makeError = (errorType: ErrorType, moveFix?: CurrentComment) => ({
       commentId: comment.id,
       commentRange: comment.commentRange,
       errorType,
+      codeLocation: {
+        uriString: codeUri.toString(),
+        range: comment.codeRange,
+      },
       actual: {
         comment: commentText,
         code: codeText,
@@ -102,7 +110,7 @@ export async function validate(
         comment: comment.commentValue,
         code: comment.codeValue,
       },
-      fix,
+      moveFix,
     });
 
     const commentMatches = commentText === comment.commentValue;
@@ -130,7 +138,7 @@ export async function validate(
     if (!commentMatches && codeMatches) {
       if (commentMovedNewIndex !== -1) {
         errors.push(
-          makeError(ErrorType.CommentMoved, makeFix(comment, "comment"))
+          makeError(ErrorType.CommentMismatch, makeFix(comment, "comment"))
         );
       } else {
         errors.push(makeError(ErrorType.CommentMismatch));
@@ -138,7 +146,7 @@ export async function validate(
     } else if (commentMatches && !codeMatches) {
       if (codeMovedNewIndex !== -1) {
         errors.push(
-          makeError(ErrorType.CommentMoved, makeFix(comment, "code"))
+          makeError(ErrorType.CodeMismatch, makeFix(comment, "code"))
         );
       } else {
         errors.push(makeError(ErrorType.CodeMismatch));
@@ -146,7 +154,7 @@ export async function validate(
     } else if (!commentMatches && !codeMatches) {
       if (commentMovedNewIndex !== -1 && codeMovedNewIndex !== -1) {
         const fix = makeFix(makeFix(comment, "comment"), "code");
-        errors.push(makeError(ErrorType.CommentMoved, fix));
+        errors.push(makeError(ErrorType.BothMismatch, fix));
       } else {
         errors.push(makeError(ErrorType.BothMismatch));
       }

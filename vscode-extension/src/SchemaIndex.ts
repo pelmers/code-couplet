@@ -20,7 +20,7 @@ import {
   log,
 } from "./logging";
 import { PROJECT_NAME } from "@lib/constants";
-import { CurrentFile, emptySchema } from "@lib/types";
+import { CurrentComment, CurrentFile, emptySchema } from "@lib/types";
 import { decorate } from "./decorations";
 import { getDiagnostics } from "./diagnostics";
 import {
@@ -30,6 +30,7 @@ import {
   updateOverlappingComments,
 } from "./schemaTools";
 import { exists, getFs } from "@lib/fsShim";
+import { fileToVscodeDocument } from "./typeConverters";
 
 const fs = getFs();
 
@@ -70,6 +71,17 @@ export class SchemaIndex {
           ),
           {
             errorPrefix: "onDidChangeActiveTextEditor",
+          }
+        )
+      ),
+      vscode.workspace.onDidOpenTextDocument(
+        e(
+          this.delegateToModel(
+            (doc) => doc.uri,
+            (model) => model.onDidOpenTextDocument
+          ),
+          {
+            errorPrefix: "onDidOpenTextDocument",
           }
         )
       ),
@@ -246,6 +258,12 @@ class SchemaModel {
     return comments;
   }
 
+  getAllCommentsByFile(fileUri: string) {
+    return this.getCommentReferencesByFile(fileUri).concat(
+      this.getCodeReferencesByFile(fileUri)
+    );
+  }
+
   getSchemaRangesByFile(fileUri: string) {
     return this.getCommentReferencesByFile(fileUri)
       .map((comment) => comment.commentRange)
@@ -256,7 +274,7 @@ class SchemaModel {
       );
   }
 
-  async publishDiagnostics(doc: vscode.TextDocument) {
+  async publishDiagnostics(doc: vscode.TextDocument, recurse: boolean = true) {
     const diagnostics = await getDiagnostics(
       doc,
       this.getSchemaByUri(doc.uri).schema
@@ -267,6 +285,24 @@ class SchemaModel {
       );
     }
     this.diagnosticCollection.set(doc.uri, diagnostics);
+    if (recurse) {
+      // Recurse means we also want to update diagnostics for any files with originating
+      // comments whose code references resolve to this one
+      await Promise.all(
+        [...this.schemaMap].map(async ([sourceUriString, file]) => {
+          const sourceUri = vscode.Uri.parse(sourceUriString);
+          const comments = file.schema.comments.filter(
+            (comment) =>
+              resolveCodePath(sourceUri, comment).toString() ===
+              doc.uri.toString()
+          );
+          if (comments.length > 0) {
+            const sourceDoc = await fileToVscodeDocument(sourceUri);
+            await this.publishDiagnostics(sourceDoc, (recurse = false));
+          }
+        })
+      );
+    }
   }
 
   /**
@@ -373,7 +409,7 @@ class SchemaModel {
   decorateByEditor(editor: vscode.TextEditor) {
     const doc = editor.document;
     if (!doc.isDirty) {
-      const { comments } = this.getSchemaByUri(doc.uri).schema;
+      const comments = this.getAllCommentsByFile(doc.uri.toString());
       decorate(
         editor,
         comments,

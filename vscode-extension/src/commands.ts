@@ -14,6 +14,7 @@ import { findIndexOfMatchingRanges, nextId } from "./schemaTools";
 import { log, errorWrapper as e } from "./logging";
 import { SchemaIndex } from "./SchemaIndex";
 import { CurrentComment } from "@lib/types";
+import { documentForUri, editorForUri, Location } from "./vscodeUtils";
 
 export function activate(
   context: vscode.ExtensionContext,
@@ -24,42 +25,12 @@ export function activate(
   context.subscriptions.push(commands);
 }
 
-type Location = {
-  uri: vscode.Uri;
-  range: vscode.Range;
-};
-
 function lastCharacterOfLine(
   document: vscode.TextDocument,
   line: number
 ): number {
   const lastLine = document.lineAt(line);
   return lastLine.range.end.character;
-}
-
-async function documentForUri(uri: vscode.Uri): Promise<vscode.TextDocument> {
-  // First see if vscode knows about the document
-  for (const doc of vscode.workspace.textDocuments) {
-    if (doc.uri.toString() === uri.toString()) {
-      return doc;
-    }
-  }
-  // Otherwise it's not open in the editor, export a TextDocument-compatible interface
-  return fileToVscodeDocument(uri);
-}
-
-function editorForUri(uri: vscode.Uri): vscode.TextEditor | undefined {
-  if (
-    vscode.window.activeTextEditor &&
-    vscode.window.activeTextEditor.document.uri.toString() === uri.toString()
-  ) {
-    return vscode.window.activeTextEditor;
-  }
-  for (const editor of vscode.window.visibleTextEditors) {
-    if (editor.document.uri.toString() === uri.toString()) {
-      return editor;
-    }
-  }
 }
 
 class Commands {
@@ -149,10 +120,8 @@ class Commands {
       await this.schemaIndex.saveSchemaByUri(commentLocation.uri, schema, {
         checkHash: true,
       });
-      const commentEditor = editorForUri(commentLocation.uri);
-      if (commentEditor) {
-        await this.schemaIndex.decorateByEditor(commentEditor);
-      }
+      await this.decorateByUri(codeLocation.uri);
+      await this.decorateByUri(commentLocation.uri);
       await this.schemaIndex.publishDiagnostics(commentDocument);
       return { status: "added", comment };
     } else {
@@ -161,12 +130,17 @@ class Commands {
       await this.schemaIndex.saveSchemaByUri(commentLocation.uri, schema, {
         checkHash: true,
       });
-      const commentEditor = editorForUri(commentLocation.uri);
-      if (commentEditor) {
-        await this.schemaIndex.decorateByEditor(commentEditor);
-      }
+      await this.decorateByUri(codeLocation.uri);
+      await this.decorateByUri(commentLocation.uri);
       await this.schemaIndex.publishDiagnostics(commentDocument);
       return { status: "updated", comment: schema.comments[existingIndex] };
+    }
+  }
+
+  async decorateByUri(uri: vscode.Uri) {
+    const editor = editorForUri(uri);
+    if (editor) {
+      await this.schemaIndex.decorateByEditor(editor);
     }
   }
 
@@ -228,10 +202,7 @@ class Commands {
       const saveUri = await this.schemaIndex.saveSchemaByUri(docUri, schema, {
         checkHash: true,
       });
-      const editor = editorForUri(docUri);
-      if (editor) {
-        await this.schemaIndex.decorateByEditor(editor);
-      }
+      await this.decorateByUri(docUri);
       await this.schemaIndex.publishDiagnostics(document);
       return { saveUri, status: "removed" };
     }
