@@ -1,3 +1,4 @@
+import { resolveCodePath } from "@lib/schema";
 import * as vscode from "vscode";
 import { SchemaIndex } from "./SchemaIndex";
 import { schemaRangeToVscode } from "./typeConverters";
@@ -24,19 +25,20 @@ class HoverProvider implements vscode.HoverProvider {
     const allCommentsInFile = await this.schemaIndex.getAllCommentsByFile(
       document.uri
     );
-    for (const comment of allCommentsInFile) {
+    for (const {sourceUri, comment} of allCommentsInFile) {
       if (token.isCancellationRequested) {
         return;
       }
       const commentRange = schemaRangeToVscode(comment.commentRange);
-      if (commentRange.contains(position)) {
+      if (sourceUri === document.uri.toString() && commentRange.contains(position)) {
         return new vscode.Hover(
           `**Code**: \`${comment.codeValue}\``,
           commentRange
         );
       }
       const codeRange = schemaRangeToVscode(comment.codeRange);
-      if (codeRange.contains(position)) {
+      const codeUri = resolveCodePath(vscode.Uri.parse(sourceUri), comment);
+      if (codeUri.toString() === document.uri.toString() && codeRange.contains(position)) {
         return new vscode.Hover(
           `**Comment**: ${comment.commentValue}`,
           codeRange

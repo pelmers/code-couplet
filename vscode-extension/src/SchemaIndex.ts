@@ -44,13 +44,16 @@ export function activate(context: vscode.ExtensionContext) {
   return schemaIndex;
 }
 
-async function loadSchemaOrEmpty(saveRoot: vscode.Uri, uri: vscode.Uri) {
-  const currentSchema = await loadSchema(saveRoot, uri);
+async function loadSchemaOrEmpty(
+  saveRoot: vscode.Uri,
+  sourceFileUri: vscode.Uri
+) {
+  const currentSchema = await loadSchema(saveRoot, sourceFileUri);
   if (currentSchema == null) {
     return { schema: emptySchema(), saveRoot, hash: EMPTY_SCHEMA_HASH };
   } else {
     const { schema, hash } = currentSchema;
-    return { schema: migrateToLatestFormat(schema), saveRoot, hash };
+    return { schema, saveRoot, hash };
   }
 }
 
@@ -59,7 +62,7 @@ export class SchemaIndex {
   private disposable: vscode.Disposable;
 
   // Map of project root to schema root
-  private schemaModels = new Map<string, SchemaModel>();
+  private schemaModels = new Map<string, Promise<SchemaModel>>();
 
   constructor() {
     this.disposable = vscode.Disposable.from(
@@ -120,11 +123,20 @@ export class SchemaIndex {
     const rootUri = await findSaveRoot(uri);
     const rootPath = rootUri.fsPath;
     if (!this.schemaModels.has(rootPath)) {
-      const schemaMap = await this.loadExistingSchemas(rootUri);
-      const model = new SchemaModel(rootUri, schemaMap);
-      this.schemaModels.set(rootPath, model);
-      // On first load, publish all diagnostics under this root
-      await model.publishAllDiagnostics();
+      this.schemaModels.set(
+        rootPath,
+        new Promise(async (resolve, reject) => {
+          try {
+            const schemaMap = await this.loadExistingSchemas(rootUri);
+            const model = new SchemaModel(rootUri, schemaMap);
+            // On first load, publish all diagnostics under this root
+            await model.publishAllDiagnostics();
+            resolve(model);
+          } catch (e) {
+            reject(e);
+          }
+        })
+      );
     }
     return this.schemaModels.get(rootPath)!;
   }
@@ -205,6 +217,7 @@ export class SchemaIndex {
   }
 }
 
+// Map of source file uri to schema
 type SchemaMap = Map<
   string,
   {
@@ -242,8 +255,63 @@ class SchemaModel {
     private rootUri: vscode.Uri,
     private schemaMap: SchemaMap = new Map()
   ) {
-    this.disposable = vscode.Disposable.from();
-    // TODO: the file watcher would go in that disposable
+    // Watch the rootUri for changes to schema files using the vscode workspace api
+    const watchUri = buildSchemaPath(rootUri);
+    const watchPattern = new vscode.RelativePattern(watchUri, "*.json");
+    dlog(
+      `Watching schema path: ${watchPattern.baseUri.fsPath} ${watchPattern.pattern}`
+    );
+    const watcher = vscode.workspace.createFileSystemWatcher(watchPattern);
+    this.disposable = vscode.Disposable.from(
+      watcher,
+      watcher.onDidChange(this.onSchemaFileChange),
+      watcher.onDidCreate(this.onSchemaFileCreate),
+      watcher.onDidDelete(this.onSchemaFileDelete)
+    );
+  }
+
+  // When schema file changes outside the editor, update the schema map if the hash differs
+  // Check the hash because our own saves trigger the change event too
+  async onSchemaFileCreateOrChange(uri: vscode.Uri, errorPrefix: string) {
+    const sourceFileUri = schemaFileUriToSourceUri(uri);
+    await e(this.guardIO, { errorPrefix })(uri, async () => {
+      // If the schema file is created, check the hash and replace existing map if it's different
+      const { schema, hash } = await loadSchemaOrEmpty(
+        this.rootUri,
+        sourceFileUri
+      );
+      const existing = this.getSchemaByUri(sourceFileUri);
+      if (existing.hash !== hash) {
+        dlog(
+          `Replacing schema map for ${uri.toString()}, on disk hash has changed`
+        );
+        this.schemaMap.set(sourceFileUri.toString(), {
+          schema,
+          hash,
+          hasUnsavedChanges: false,
+        });
+      } else {
+        dlog(`Schema map for ${uri.toString()} is unchanged, skipping`);
+      }
+    });
+  }
+
+  // When schema file changes outside the editor, update the schema map
+  async onSchemaFileChange(uri: vscode.Uri) {
+    dlog(`onSchemaFileChange: ${uri.fsPath}`);
+    await this.onSchemaFileCreateOrChange(uri, "onSchemaFileChange");
+  }
+
+  async onSchemaFileCreate(uri: vscode.Uri) {
+    dlog(`onSchemaFileCreate: ${uri.fsPath}`);
+    await this.onSchemaFileCreateOrChange(uri, "onSchemaFileCreate");
+  }
+
+  // When schema file changes outside the editor, update the schema map
+  async onSchemaFileDelete(uri: vscode.Uri) {
+    // If the schema file is deleted, remove it from the schema map
+    dlog(`Schema file deleted: ${uri.fsPath}`);
+    this.schemaMap.delete(schemaFileUriToSourceUri(uri).toString());
   }
 
   async publishAllDiagnostics() {
@@ -261,18 +329,29 @@ class SchemaModel {
     if (!this.schemaMap.has(fileUri)) {
       return [];
     }
-    return this.schemaMap.get(fileUri)!.schema.comments;
+    return this.schemaMap.get(fileUri)!.schema.comments.map((comment) => ({
+      comment,
+      sourceUri: fileUri,
+    }));
   }
 
-  getCodeReferencesByFile(fileUri: string) {
+  getCodeReferencesByFile(fileUri: string, params: {excludeSelf?: boolean} = {}) {
     const comments = [];
     for (const [sourceUriString, file] of this.schemaMap) {
+      if (params.excludeSelf && sourceUriString === fileUri) {
+        continue;
+      }
       const sourceUri = vscode.Uri.parse(sourceUriString);
       comments.push(
-        ...file.schema.comments.filter(
-          (comment) =>
-            resolveCodePath(sourceUri, comment).toString() === fileUri
-        )
+        ...file.schema.comments
+          .filter(
+            (comment) =>
+              resolveCodePath(sourceUri, comment).toString() === fileUri
+          )
+          .map((comment) => ({
+            comment,
+            sourceUri: sourceUriString,
+          }))
       );
     }
     return comments;
@@ -280,16 +359,16 @@ class SchemaModel {
 
   getAllCommentsByFile(fileUri: string) {
     return this.getCommentReferencesByFile(fileUri).concat(
-      this.getCodeReferencesByFile(fileUri)
+      this.getCodeReferencesByFile(fileUri, {excludeSelf: true})
     );
   }
 
   getSchemaRangesByFile(fileUri: string) {
     return this.getCommentReferencesByFile(fileUri)
-      .map((comment) => comment.commentRange)
+      .map((comment) => comment.comment.commentRange)
       .concat(
         this.getCodeReferencesByFile(fileUri).map(
-          (comment) => comment.codeRange
+          (comment) => comment.comment.codeRange
         )
       );
   }

@@ -48,6 +48,11 @@ export type TFile = t.TypeOf<typeof File>;
 // * This type should match the latest version
 export type CurrentFile = t.TypeOf<typeof FileV1>;
 export type CurrentComment = CurrentFile["comments"][number];
+export type CurrentCommentWithUri = {
+  // The sourceUri is the uri of the source file that contains the comment
+  sourceUri: string;
+  comment: CurrentComment;
+};
 
 export function emptySchema(): CurrentFile {
   return {

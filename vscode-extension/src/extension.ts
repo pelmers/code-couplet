@@ -18,4 +18,6 @@ export async function activate(context: vscode.ExtensionContext) {
   activateCodeActions(context);
 
   activateHover(context, schemaModel);
+
+  // TODO: similar to the hover, add a definition provider to jump to the corresponding comment/code
 }

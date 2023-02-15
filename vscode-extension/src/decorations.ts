@@ -1,5 +1,5 @@
-import { PROJECT_NAME } from "@lib/constants";
-import { CurrentComment, CurrentFile } from "@lib/types";
+import { resolveCodePath } from "@lib/schema";
+import { CurrentCommentWithUri } from "@lib/types";
 import * as vscode from "vscode";
 import { log } from "./logging";
 import { schemaRangeToVscode } from "./typeConverters";
@@ -12,7 +12,7 @@ const DECORATION_MAX_LINES = 10000;
  */
 export function decorate(
   editor: vscode.TextEditor,
-  comments: CurrentComment[],
+  comments: CurrentCommentWithUri[],
   commentDecorationType: vscode.TextEditorDecorationType,
   codeDecorationType: vscode.TextEditorDecorationType
 ) {
@@ -30,15 +30,18 @@ export function decorate(
   }
   editor.setDecorations(commentDecorationType, []);
   editor.setDecorations(codeDecorationType, []);
+  const editorUri = editor.document.uri.toString();
   const commentRanges = [];
   const codeRanges = [];
-  for (const comment of comments) {
-    // If the comment and code values match the document, then we can decorate them
-    // otherwise we will show a diagnostic to the user
-    const commentRange = schemaRangeToVscode(comment.commentRange);
-    const codeRange = schemaRangeToVscode(comment.codeRange);
-    commentRanges.push(commentRange);
-    codeRanges.push(codeRange);
+  for (const {sourceUri, comment} of comments) {
+    if (sourceUri === editorUri) {
+      const commentRange = schemaRangeToVscode(comment.commentRange);
+      commentRanges.push(commentRange);
+    }
+    if (resolveCodePath(vscode.Uri.parse(sourceUri), comment).toString() === editorUri) {
+      const codeRange = schemaRangeToVscode(comment.codeRange);
+      codeRanges.push(codeRange);
+    }
   }
   editor.setDecorations(commentDecorationType, commentRanges);
   editor.setDecorations(codeDecorationType, codeRanges);
