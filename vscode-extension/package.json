@@ -11,10 +11,7 @@
   ],
   "activationEvents": [
     "*",
-    "onCommand:TODO_remove_this_*_activation",
-    "onCommand:code-couplet-vscode.linkSelection",
-    "onCommand:code-couplet-vscode.autoLinkSelection",
-    "onCommand:code-couplet-vscode.removeLink"
+    "onCommand:TODO_remove_this_*_activation"
   ],
   "main": "./dist/extension.js",
   "contributes": {

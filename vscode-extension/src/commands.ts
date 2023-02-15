@@ -76,7 +76,6 @@ class Commands {
     config: LanguageConfiguration,
     commentLocation: vscode.Location,
     codeLocation: vscode.Location
-    // TODO next: what if code is in another file lol
   ): Promise<{ status: string; comment: CurrentComment }> {
     const commentDocument = await documentForUri(commentLocation.uri);
     const codeDocument = await documentForUri(codeLocation.uri);

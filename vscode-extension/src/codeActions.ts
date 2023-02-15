@@ -85,7 +85,6 @@ class CodeActions {
           )
         );
       }
-      // TODO: If moveFix is available, offer to update schema to the found range.
     }
     return codeActions;
   }

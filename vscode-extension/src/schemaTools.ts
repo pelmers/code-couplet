@@ -46,11 +46,6 @@ export function lastLineLength(text: string): number {
   return text.length - lastLineIndex - 1;
 }
 
-export function copySchema(schema: CurrentFile): CurrentFile {
-  // TODO: obviously this could be made more efficient
-  return JSON.parse(JSON.stringify(schema));
-}
-
 /**
  * Return a unique id for the given schema by taking its current max and adding one
  */
@@ -60,25 +55,6 @@ export function nextId(schema: CurrentFile): number {
     currentMax = Math.max(currentMax, comment.id);
   }
   return currentMax + 1;
-}
-
-function withChangeDelta(
-  schemaRange: SchemaRange,
-  lineDelta: number,
-  charDelta: number
-) {
-  return schemaRange;
-  // TODO: vscode does this next part, but why? seems wrong in this case
-  return {
-    start: {
-      line: schemaRange.start.line + lineDelta,
-      char: schemaRange.start.char + charDelta,
-    },
-    end: {
-      line: schemaRange.end.line + lineDelta,
-      char: schemaRange.end.char + charDelta,
-    },
-  };
 }
 
 /**

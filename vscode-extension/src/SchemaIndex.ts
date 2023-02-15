@@ -400,8 +400,7 @@ class SchemaModel {
     changes: readonly vscode.TextDocumentContentChangeEvent[]
   ) => {
     let wasUpdated = false;
-    // TODO: this is buggy, how did vs code do it?
-    // search for 'acceptChanges' in IntervalTree.ts
+    // similar logic to 'acceptChanges' in IntervalTree.ts of vscode
     // it's also used for multicursor tracking and decorations for search results
     // https://github.com/microsoft/vscode/blob/3e407526a1e2ff22cacb69c7e353e81a12f41029/src/vs/editor/common/model/intervalTree.ts#L278
     for (const change of changes) {
