@@ -335,7 +335,10 @@ class SchemaModel {
     }));
   }
 
-  getCodeReferencesByFile(fileUri: string, params: {excludeSelf?: boolean} = {}) {
+  getCodeReferencesByFile(
+    fileUri: string,
+    params: { excludeSelf?: boolean } = {}
+  ) {
     const comments = [];
     for (const [sourceUriString, file] of this.schemaMap) {
       if (params.excludeSelf && sourceUriString === fileUri) {
@@ -359,7 +362,7 @@ class SchemaModel {
 
   getAllCommentsByFile(fileUri: string) {
     return this.getCommentReferencesByFile(fileUri).concat(
-      this.getCodeReferencesByFile(fileUri, {excludeSelf: true})
+      this.getCodeReferencesByFile(fileUri, { excludeSelf: true })
     );
   }
 

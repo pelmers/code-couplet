@@ -40,6 +40,14 @@
       }
     }
   },
+  "keybindings": [
+    {
+      "command": "comment-pin-vscode.autoLinkSelection",
+      "key": "ctrl+shift+a",
+      "mac": "cmd+shift+a",
+      "when": "editorTextFocus"
+    }
+  ],
   "scripts": {
     "vscode:prepublish": "yarn run package",
     "build": "node_modules/.bin/webpack",

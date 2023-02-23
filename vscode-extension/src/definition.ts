@@ -7,21 +7,21 @@ export function activate(
   context: vscode.ExtensionContext,
   schemaIndex: SchemaIndex
 ) {
-  const provider = new HoverProvider(schemaIndex);
+  const provider = new DefinitionProvider(schemaIndex);
   context.subscriptions.push(
-    vscode.languages.registerHoverProvider({ scheme: "file" }, provider)
+    vscode.languages.registerDefinitionProvider({ scheme: "file" }, provider)
   );
 }
 
-class HoverProvider implements vscode.HoverProvider {
+class DefinitionProvider implements vscode.DefinitionProvider {
   constructor(private schemaIndex: SchemaIndex) {}
 
-  async provideHover(
+  async provideDefinition(
     document: vscode.TextDocument,
     position: vscode.Position,
     token: vscode.CancellationToken
-  ): Promise<vscode.Hover | undefined> {
-    // Hovering on comment shows code, hovering on code shows comment
+  ): Promise<vscode.Definition | undefined> {
+    // Link to the code from the comment and to the comment from the code
     const allCommentsInFile = await this.schemaIndex.getAllCommentsByFile(
       document.uri
     );
@@ -34,10 +34,10 @@ class HoverProvider implements vscode.HoverProvider {
         sourceUri === document.uri.toString() &&
         commentRange.contains(position)
       ) {
-        return new vscode.Hover(
-          `**Code**: \`${comment.codeValue}\``,
-          commentRange
-        );
+        return {
+          uri: resolveCodePath(vscode.Uri.parse(sourceUri), comment),
+          range: schemaRangeToVscode(comment.codeRange),
+        };
       }
       const codeRange = schemaRangeToVscode(comment.codeRange);
       const codeUri = resolveCodePath(vscode.Uri.parse(sourceUri), comment);
@@ -45,10 +45,10 @@ class HoverProvider implements vscode.HoverProvider {
         codeUri.toString() === document.uri.toString() &&
         codeRange.contains(position)
       ) {
-        return new vscode.Hover(
-          `**Comment**: ${comment.commentValue}`,
-          codeRange
-        );
+        return {
+          uri: vscode.Uri.parse(sourceUri),
+          range: schemaRangeToVscode(comment.commentRange),
+        };
       }
     }
   }

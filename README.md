@@ -9,7 +9,7 @@ Think of it as a typechecker for your comments.
 
 CommentPin itself is a Node program which reads a stored description of code-comment relationships and verifies the codebase against these relationships.
 These are stored in a `.pinned-comments` folder in the root of your repository.
-*Commit this folder into version control.*
+_Commit this folder into version control._
 
 Currently CommentPin is provided through a [VS Code extension](TODO-link).
 In the future I expect to extend the tool to be accessible on the command line, as a Git pre-commit hook, and as a continuous integration job.

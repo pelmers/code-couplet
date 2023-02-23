@@ -33,12 +33,15 @@ export function decorate(
   const editorUri = editor.document.uri.toString();
   const commentRanges = [];
   const codeRanges = [];
-  for (const {sourceUri, comment} of comments) {
+  for (const { sourceUri, comment } of comments) {
     if (sourceUri === editorUri) {
       const commentRange = schemaRangeToVscode(comment.commentRange);
       commentRanges.push(commentRange);
     }
-    if (resolveCodePath(vscode.Uri.parse(sourceUri), comment).toString() === editorUri) {
+    if (
+      resolveCodePath(vscode.Uri.parse(sourceUri), comment).toString() ===
+      editorUri
+    ) {
       const codeRange = schemaRangeToVscode(comment.codeRange);
       codeRanges.push(codeRange);
     }

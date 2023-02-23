@@ -5,6 +5,7 @@ import { activate as activateSchemaIndex } from "./SchemaIndex";
 import { activate as activateCommands } from "./commands";
 import { activate as activateCodeActions } from "./codeActions";
 import { activate as activateHover } from "./hover";
+import { activate as activateDefinition } from "./hover";
 
 export async function activate(context: vscode.ExtensionContext) {
   const languageConfig = new LanguageConfiguration();
@@ -19,5 +20,5 @@ export async function activate(context: vscode.ExtensionContext) {
 
   activateHover(context, schemaModel);
 
-  // TODO: similar to the hover, add a definition provider to jump to the corresponding comment/code
+  activateDefinition(context, schemaModel);
 }
