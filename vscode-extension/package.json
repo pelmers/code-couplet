@@ -1,7 +1,7 @@
 {
-  "name": "code-couplet-vscode",
-  "displayName": "Code Couplet",
-  "description": "Typechecker for your comments. Guarantee your comments are up to date with your code.",
+  "name": "comment-pin-vscode",
+  "displayName": "Pinned Comments",
+  "description": "Typechecker for your comments. Guarantee your comments are up to date with your code by pinning them together.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.70.0"
@@ -17,22 +17,22 @@
   "contributes": {
     "commands": [
       {
-        "command": "code-couplet-vscode.linkSelection",
-        "title": "Code Couplet: Manually Link Selection"
+        "command": "comment-pin-vscode.linkSelection",
+        "title": "Pinned Comments: Link Selection"
       },
       {
-        "command": "code-couplet-vscode.autoLinkSelection",
-        "title": "Code Couplet: AutoLink Selection"
+        "command": "comment-pin-vscode.autoLinkSelection",
+        "title": "Pinned Comments: Automatically Link Lines"
       },
       {
-        "command": "code-couplet-vscode.removeLink",
-        "title": "Code Couplet: Remove Link"
+        "command": "comment-pin-vscode.removeLink",
+        "title": "Pinned Comments: Remove Link in File"
       }
     ],
     "configuration": {
-      "title": "Code Couplet",
+      "title": "Pinned Comments",
       "properties": {
-        "code-couplet.showLinkingSuccessMessage": {
+        "comment-pin.showLinkingSuccessMessage": {
           "type": "boolean",
           "default": true,
           "description": "Show success message"

@@ -1,7 +1,7 @@
 {
-  "name": "code-couplet",
+  "name": "comment-pin",
   "version": "1.0.0",
-  "description": "Sync comments with code",
+  "description": "Pin comments to code",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "author": "Peter Elmers <peter.elmers@yahoo.com>",

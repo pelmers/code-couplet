@@ -11,7 +11,7 @@ import * as crypto from "crypto";
 const fs = getFs();
 
 const PATH_TRANSFORM_FRAGMENT = "cCCc";
-const KNOWN_FOLDER_NAME = ".cc_mappings";
+const KNOWN_FOLDER_NAME = ".pinned-comments";
 
 const saveRootCache = new Map<string, URI>();
 
