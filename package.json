@@ -1,5 +1,5 @@
 {
-  "name": "comment-pin",
+  "name": "code-couplet",
   "version": "1.0.0",
   "description": "Pin comments to code",
   "main": "dist/index.js",

@@ -16,7 +16,7 @@
       "outFiles": ["${workspaceFolder}/vscode-extension/dist/**/*.js"],
       // path override required because the extension is in a subfolder
       "sourceMapPathOverrides": {
-        "webpack://comment-pin-vscode/./*": "${workspaceFolder}/vscode-extension/*"
+        "webpack://code-couplet-vscode/./*": "${workspaceFolder}/vscode-extension/*"
       },
       // https://stackoverflow.com/questions/63502253/vscode-build-error-the-terminal-process-bin-zsh-c-yarn-run-watch-extensi
       // if error, set "terminal.integrated.inheritEnv": false and quit/re-open

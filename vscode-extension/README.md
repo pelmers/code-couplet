@@ -1,4 +1,4 @@
-# Pinned Comments VS Code Extension
+# Code Couplet VS Code Extension
 
 TODO: blurb about why to use it (linked from main page)
 

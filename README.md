@@ -1,4 +1,4 @@
-# CommentPin
+# Code Couplet
 
 **A typechecker for your comments.**
 
@@ -7,16 +7,15 @@ Think of it as a typechecker for your comments.
 
 ## Usage
 
-CommentPin itself is a Node program which reads a stored description of code-comment relationships and verifies the codebase against these relationships.
-These are stored in a `.pinned-comments` folder in the root of your repository.
+Code Couplet itself is a Node program which reads a stored description of code-comment relationships and verifies the codebase against these relationships.
+These are stored in a `.code-couplet` folder in the root of your repository.
 _Commit this folder into version control._
 
-Currently CommentPin is provided through a [VS Code extension](TODO-link).
-In the future I expect to extend the tool to be accessible on the command line, as a Git pre-commit hook, and as a continuous integration job.
+Currently Code Couplet is a [VS Code extension](TODO-link).
 
 ### VS Code
 
-The VS Code extension for CommentPin provides a quick way to link comments with code.
+The VS Code extension for Code Couplet provides a quick way to link comments with code.
 TODO: screencast
 
 It also verifies existing connections and provides diagnostic errors.
@@ -27,3 +26,8 @@ TODO: screencast
 
 Schema is defined in Typescript and encoded/decoded using io-ts with JSON serialization.
 See [`src/schema.ts`](src/schema.ts).
+
+## Future Plans
+ - Command line interface
+ - Git pre-commit hook
+ - Continuous integration job
