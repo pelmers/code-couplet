@@ -34,16 +34,21 @@ class DefinitionProvider implements vscode.DefinitionProvider {
         sourceUri === document.uri.toString() &&
         commentRange.contains(position)
       ) {
-        return {
-          uri: resolveCodePath(vscode.Uri.parse(sourceUri), comment),
-          range: schemaRangeToVscode(comment.codeRange),
-        };
+        // Only provide the definition if the code is in a different file
+        const codeUri = resolveCodePath(vscode.Uri.parse(sourceUri), comment);
+        if (codeUri.toString() !== document.uri.toString()) {
+          return {
+            uri: resolveCodePath(vscode.Uri.parse(sourceUri), comment),
+            range: schemaRangeToVscode(comment.codeRange),
+          };
+        }
       }
       const codeRange = schemaRangeToVscode(comment.codeRange);
       const codeUri = resolveCodePath(vscode.Uri.parse(sourceUri), comment);
       if (
         codeUri.toString() === document.uri.toString() &&
-        codeRange.contains(position)
+        codeRange.contains(position) &&
+        sourceUri !== document.uri.toString()
       ) {
         return {
           uri: vscode.Uri.parse(sourceUri),

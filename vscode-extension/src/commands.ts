@@ -394,7 +394,7 @@ class Commands {
         commentValue: editor.document.getText(selection),
       };
       await vscode.window.showInformationMessage(
-        "Comment selected, now select the corresponding code and run the pin command again"
+        "Comment selected, now run it on the code"
       );
     } else {
       const { commentLocation } = this.currentLinkContext;

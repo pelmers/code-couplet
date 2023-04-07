@@ -6,10 +6,15 @@
   "engines": {
     "vscode": "^1.70.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pelmers/code-couplet.git"
+  },
   "categories": [
     "Other"
   ],
   "activationEvents": [
+    "workspaceContains:.code-couplet/**"
   ],
   "main": "./dist/extension.js",
   "contributes": {
