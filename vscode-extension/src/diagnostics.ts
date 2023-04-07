@@ -21,7 +21,6 @@ export async function getDiagnostics(
     } else {
       message = `Unknown error`;
     }
-    // Dear copilot, how can I add extra context into the diagnostic that is hidden from the user interface?
     return {
       range: schemaRangeToVscode(error.commentRange),
       message,

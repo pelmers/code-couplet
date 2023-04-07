@@ -6,6 +6,7 @@ Once pinned, any change to the comment or code will be checked and a diagnostic 
 ### Why do this?
 
 Think of this tool as a _typechecker for your comments_.
+
 Just like how typed code will definitely have the type you expect, a pinned comment will definitely match the code it was written for.
 The idea is simple: once you have pinned your comment to your code, you don't need to worry that it does not match.
 Pinned comments and code are highlighted in the editor and update their committed positions intelligently as you type.
@@ -42,3 +43,8 @@ Pinned comments and code are highlighted in the editor and update their committe
 ## Additional
 
 - For bugs and feature requests, please visit the repository [on GitHub](https://github.com/pelmers/code-couplet)
+
+**Known Limitations**
+
+- Auto-pinning only works with single-line commnents, and the comment has to be the whole line
+- If schema files change outside the editor, they will not be noticed until the extension is restarted

@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "comments": [
+    {
+      "commentRange": {
+        "start": {
+          "line": 73,
+          "char": 5
+        },
+        "end": {
+          "line": 73,
+          "char": 14
+        }
+      },
+      "codeRange": {
+        "start": {
+          "line": 74,
+          "char": 8
+        },
+        "end": {
+          "line": 74,
+          "char": 17
+        }
+      },
+      "codeRelativePath": "",
+      "commentValue": "lineDelta",
+      "codeValue": "lineDelta",
+      "id": 0
+    },
+    {
+      "commentRange": {
+        "start": {
+          "line": 79,
+          "char": 5
+        },
+        "end": {
+          "line": 79,
+          "char": 14
+        }
+      },
+      "codeRange": {
+        "start": {
+          "line": 80,
+          "char": 8
+        },
+        "end": {
+          "line": 80,
+          "char": 17
+        }
+      },
+      "codeRelativePath": "",
+      "commentValue": "charDelta",
+      "codeValue": "charDelta",
+      "id": 1
+    }
+  ],
+  "configuration": {
+    "lineComment": "//"
+  }
+}
