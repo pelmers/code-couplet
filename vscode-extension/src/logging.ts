@@ -26,6 +26,7 @@ export function dlog(...messages: unknown[]) {
 /**
  * Given func, return new function with the same signature that wraps any errors func throws
  * and shows them in a vscode info box and error console.
+ * STRICT VERSION ONLY: Then re-throw the error.
  */
 export function errorWrapperStrict<TInput extends any[], TOutput>(
   func: (...args: TInput) => TOutput,
@@ -43,6 +44,7 @@ export function errorWrapperStrict<TInput extends any[], TOutput>(
       if (params.showErrorMessage) {
         vscode.window.showErrorMessage(message);
       }
+      log(`Error: ${message}`);
       throw e;
     }
   };

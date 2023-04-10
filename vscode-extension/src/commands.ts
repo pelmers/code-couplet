@@ -5,13 +5,9 @@ import { findSingleLineComments } from "./commentParser";
 import { PROJECT_NAME } from "@lib/constants";
 import { getCodeRelativePath } from "@lib/schema";
 import { getErrorMessage } from "@lib/utils";
-import {
-  vscodeRangeToSchema,
-  pos,
-  fileToVscodeDocument,
-} from "./typeConverters";
+import { vscodeRangeToSchema, pos } from "./typeConverters";
 import { findIndexOfMatchingRanges, nextId } from "./schemaTools";
-import { log, errorWrapper as e } from "./logging";
+import { errorWrapper as e } from "./logging";
 import { SchemaIndex } from "./SchemaIndex";
 import { CurrentComment } from "@lib/types";
 import { documentForUri, editorForUri } from "./vscodeUtils";
@@ -119,8 +115,8 @@ class Commands {
       await this.schemaIndex.saveSchemaByUri(commentLocation.uri, schema, {
         checkHash: true,
       });
-      await this.decorateByUri(codeLocation.uri);
-      await this.decorateByUri(commentLocation.uri);
+      await this.schemaIndex.decorateByUri(codeLocation.uri);
+      await this.schemaIndex.decorateByUri(commentLocation.uri);
       await this.schemaIndex.publishDiagnostics(commentDocument);
       return { status: "added", comment };
     } else {
@@ -129,17 +125,10 @@ class Commands {
       await this.schemaIndex.saveSchemaByUri(commentLocation.uri, schema, {
         checkHash: true,
       });
-      await this.decorateByUri(codeLocation.uri);
-      await this.decorateByUri(commentLocation.uri);
+      await this.schemaIndex.decorateByUri(codeLocation.uri);
+      await this.schemaIndex.decorateByUri(commentLocation.uri);
       await this.schemaIndex.publishDiagnostics(commentDocument);
       return { status: "updated", comment: schema.comments[existingIndex] };
-    }
-  }
-
-  async decorateByUri(uri: vscode.Uri) {
-    const editor = editorForUri(uri);
-    if (editor) {
-      await this.schemaIndex.decorateByEditor(editor);
     }
   }
 
@@ -173,37 +162,6 @@ class Commands {
         const { status } = result;
         vscode.window.setStatusBarMessage(`Comment link: ${status}`, 4000);
       }
-    }
-  }
-
-  /**
-   * Remove the linked sections from the map file by loading the existing one and then saving it
-   */
-  async removeCommentFromSchema(
-    docUri: vscode.Uri,
-    comment: CurrentComment
-  ): Promise<
-    { status: "removed"; saveUri: vscode.Uri } | { status: "not found" }
-  > {
-    const document = await documentForUri(docUri);
-    const schema = (await this.schemaIndex.getSchemaByUri(docUri))!;
-    if (document.isDirty) {
-      throw new Error(
-        `Cannot remove link because of unsaved changes. Please save the document first.`
-      );
-    }
-    // Find the codeRange and commentRange in the existing comments, and remove them
-    const existingIndex = schema.comments.findIndex((c) => c.id === comment.id);
-    if (existingIndex == -1) {
-      return { status: "not found" };
-    } else {
-      schema.comments.splice(existingIndex, 1);
-      const saveUri = await this.schemaIndex.saveSchemaByUri(docUri, schema, {
-        checkHash: true,
-      });
-      await this.decorateByUri(docUri);
-      await this.schemaIndex.publishDiagnostics(document);
-      return { saveUri, status: "removed" };
     }
   }
 
@@ -338,7 +296,7 @@ class Commands {
     if (!selectedComment) {
       return;
     }
-    const { status } = await this.removeCommentFromSchema(
+    const { status } = await this.schemaIndex.removeCommentFromSchema(
       uri,
       selectedComment.comment
     );
@@ -423,7 +381,7 @@ class Commands {
       neverAgain
     );
     if (choice === undo) {
-      const undoResult = await this.removeCommentFromSchema(
+      const undoResult = await this.schemaIndex.removeCommentFromSchema(
         commentDocUri,
         comment
       );

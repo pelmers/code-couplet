@@ -39,7 +39,7 @@ const FileV1 = t.type({
   configuration: ConfigurationV1,
   comments: t.array(CommentV1),
 });
-export type FileV1 = t.TypeOf<typeof FileV1>;
+type FileV1 = t.TypeOf<typeof FileV1>;
 
 // * When there are more versions, this should be a union of all of them
 export const File = FileV1;

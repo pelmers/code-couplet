@@ -16,7 +16,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   activateCommands(context, schemaModel, languageConfig);
 
-  activateCodeActions(context);
+  activateCodeActions(context, schemaModel);
 
   activateHover(context, schemaModel);
 

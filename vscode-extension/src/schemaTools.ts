@@ -1,11 +1,4 @@
-import { findSaveRoot, migrateToLatestFormat } from "@lib/schema";
-import {
-  CurrentComment,
-  CurrentFile,
-  emptySchema,
-  Range as SchemaRange,
-  Position as SchemaPosition,
-} from "@lib/types";
+import { CurrentFile, Range as SchemaRange } from "@lib/types";
 import { pos, schemaRangeToVscode } from "./typeConverters";
 
 import * as vscode from "vscode";

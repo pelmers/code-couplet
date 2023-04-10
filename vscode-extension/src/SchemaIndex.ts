@@ -3,12 +3,13 @@
 // If there is no existing schema then create a new one.
 
 import * as vscode from "vscode";
+import * as path from "path";
 
 import {
   buildSchemaPath,
   findSaveRoot,
+  getSourceRootRelativePath,
   loadSchema,
-  migrateToLatestFormat,
   resolveCodePath,
   saveSchema,
   schemaFileUriToSourceUri,
@@ -31,7 +32,7 @@ import {
 } from "./schemaTools";
 import { exists, getFs } from "@lib/fsShim";
 import { fileToVscodeDocument } from "./typeConverters";
-import { documentForUri } from "./vscodeUtils";
+import { documentForUri, editorForUri } from "./vscodeUtils";
 
 const fs = getFs();
 
@@ -50,7 +51,11 @@ async function loadSchemaOrEmpty(
 ) {
   const currentSchema = await loadSchema(saveRoot, sourceFileUri);
   if (currentSchema == null) {
-    return { schema: emptySchema(), saveRoot, hash: EMPTY_SCHEMA_HASH };
+    return {
+      schema: emptySchema(),
+      saveRoot,
+      hash: EMPTY_SCHEMA_HASH,
+    };
   } else {
     const { schema, hash } = currentSchema;
     return { schema, saveRoot, hash };
@@ -113,7 +118,6 @@ export class SchemaIndex {
           }
         )
       )
-      // TODO: 5. what if schema file changes outside editor?
     );
   }
 
@@ -201,6 +205,44 @@ export class SchemaIndex {
     model.decorateByEditor(editor);
   }
 
+  async decorateByUri(uri: vscode.Uri) {
+    const editor = editorForUri(uri);
+    if (editor) {
+      await this.decorateByEditor(editor);
+    }
+  }
+
+  /**
+   * Remove the linked sections from the map file by loading the existing one and then saving it
+   */
+  async removeCommentFromSchema(
+    docUri: vscode.Uri,
+    comment: CurrentComment
+  ): Promise<
+    { status: "removed"; saveUri: vscode.Uri } | { status: "not found" }
+  > {
+    const document = await documentForUri(docUri);
+    const schema = (await this.getSchemaByUri(docUri))!;
+    if (document.isDirty) {
+      throw new Error(
+        `Cannot remove link because of unsaved changes. Please save the document first.`
+      );
+    }
+    // Find the codeRange and commentRange in the existing comments, and remove them
+    const existingIndex = schema.comments.findIndex((c) => c.id === comment.id);
+    if (existingIndex == -1) {
+      return { status: "not found" };
+    } else {
+      schema.comments.splice(existingIndex, 1);
+      const saveUri = await this.saveSchemaByUri(docUri, schema, {
+        checkHash: true,
+      });
+      await this.decorateByUri(docUri);
+      await this.publishDiagnostics(document);
+      return { saveUri, status: "removed" };
+    }
+  }
+
   async getAllCommentsByFile(uri: vscode.Uri) {
     const model = await this.getSchemaRoot(uri);
     return model.getAllCommentsByFile(uri.toString());
@@ -211,7 +253,6 @@ export class SchemaIndex {
     await model.publishDiagnostics(doc);
   }
 
-  // TODO: implement all the document watching stuff
   dispose() {
     this.disposable.dispose();
   }
@@ -229,7 +270,6 @@ type SchemaMap = Map<
 
 // Class which handles operations for given project root.
 // Handles document opens, saves, and changes to files under this root.
-// TODO: Watches project roots for changes to schema files.
 class SchemaModel {
   disposable: vscode.Disposable;
 
@@ -272,7 +312,7 @@ class SchemaModel {
 
   // When schema file changes outside the editor, update the schema map if the hash differs
   // Check the hash because our own saves trigger the change event too
-  async onSchemaFileCreateOrChange(uri: vscode.Uri, errorPrefix: string) {
+  onSchemaFileCreateOrChange = async (uri: vscode.Uri, errorPrefix: string) => {
     const sourceFileUri = schemaFileUriToSourceUri(uri);
     await e(this.guardIO, { errorPrefix })(uri, async () => {
       // If the schema file is created, check the hash and replace existing map if it's different
@@ -290,29 +330,38 @@ class SchemaModel {
           hash,
           hasUnsavedChanges: false,
         });
+        const editor = editorForUri(sourceFileUri);
+        if (editor) {
+          this.decorateByEditor(editor);
+        }
       } else {
         dlog(`Schema map for ${uri.toString()} is unchanged, skipping`);
       }
     });
-  }
+  };
 
   // When schema file changes outside the editor, update the schema map
-  async onSchemaFileChange(uri: vscode.Uri) {
+  onSchemaFileChange = async (uri: vscode.Uri) => {
     dlog(`onSchemaFileChange: ${uri.fsPath}`);
     await this.onSchemaFileCreateOrChange(uri, "onSchemaFileChange");
-  }
+  };
 
-  async onSchemaFileCreate(uri: vscode.Uri) {
+  onSchemaFileCreate = async (uri: vscode.Uri) => {
     dlog(`onSchemaFileCreate: ${uri.fsPath}`);
     await this.onSchemaFileCreateOrChange(uri, "onSchemaFileCreate");
-  }
+  };
 
   // When schema file changes outside the editor, update the schema map
-  async onSchemaFileDelete(uri: vscode.Uri) {
+  onSchemaFileDelete = async (uri: vscode.Uri) => {
     // If the schema file is deleted, remove it from the schema map
     dlog(`Schema file deleted: ${uri.fsPath}`);
-    this.schemaMap.delete(schemaFileUriToSourceUri(uri).toString());
-  }
+    const sourceFileUri = schemaFileUriToSourceUri(uri);
+    this.schemaMap.delete(sourceFileUri.toString());
+    const editor = editorForUri(sourceFileUri);
+    if (editor) {
+      this.decorateByEditor(editor);
+    }
+  };
 
   async publishAllDiagnostics() {
     await Promise.all(
@@ -414,10 +463,10 @@ class SchemaModel {
    * @param fn called when the block is released
    * @returns whatever fn returns
    */
-  guardIO<TOutput>(
+  guardIO = async <TOutput>(
     uri: vscode.Uri,
     fn: () => Promise<TOutput>
-  ): Promise<TOutput> {
+  ): Promise<TOutput> => {
     const key = uri.toString();
     let existingPromise;
     if (this.ioSerializationPromises.has(key)) {
@@ -435,17 +484,17 @@ class SchemaModel {
       }
     });
     return promise;
-  }
+  };
 
-  getSchemaByUri(uri: vscode.Uri) {
-    if (!this.schemaMap.has(uri.toString())) {
-      this.schemaMap.set(uri.toString(), {
+  getSchemaByUri(sourceFileUri: vscode.Uri) {
+    if (!this.schemaMap.has(sourceFileUri.toString())) {
+      this.schemaMap.set(sourceFileUri.toString(), {
         schema: emptySchema(),
         hash: EMPTY_SCHEMA_HASH,
         hasUnsavedChanges: false,
       });
     }
-    return this.schemaMap.get(uri.toString())!;
+    return this.schemaMap.get(sourceFileUri.toString())!;
   }
 
   saveSchemaByUri = eStrict(

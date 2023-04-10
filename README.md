@@ -2,7 +2,7 @@
 
 **A typechecker for your comments.**
 
-A simple VS Code extension which checks that your code and comments are in sync.
+A simple [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pelmers.code-couplet-vscode) which checks that your code and comments are in sync.
 Think of it as a typechecker for your comments.
 
 ## Usage
@@ -11,7 +11,7 @@ Code Couplet itself is a Node program which reads a stored description of code-c
 These are stored in a `.code-couplet` folder in the root of your repository.
 _Commit this folder into version control._
 
-Currently Code Couplet is a [VS Code extension](vscode-extension/).
+Currently Code Couplet is a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pelmers.code-couplet-vscode).
 
 ### VS Code
 
@@ -26,10 +26,12 @@ These errors can include quick fixes to update the saved link automatically.
 ## Schema
 
 Schema is defined in Typescript and encoded/decoded using io-ts with JSON serialization.
-See [`src/schema.ts`](src/schema.ts).
+See [`src/types.ts`](src/types.ts).
 
 ## Future Plans
 
 - Command line interface
 - Git pre-commit hook
 - Continuous integration job
+
+Read more details at my blog post: https://pelmers.com/typechecked-comments/

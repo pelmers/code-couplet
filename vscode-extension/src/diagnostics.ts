@@ -26,17 +26,15 @@ export async function getDiagnostics(
       message,
       severity: vscode.DiagnosticSeverity.Error,
       source: PROJECT_NAME,
-      code: error.commentId,
-      // Pass along related info that tells the code action what were the expected values
-      relatedInformation: [
-        {
-          location: {
-            uri: error.codeLocation.uri,
-            range: schemaRangeToVscode(error.codeLocation.range),
-          },
-          message: JSON.stringify({ t: error.errorType, ...error.expected }),
-        },
-      ],
+      code: {
+        value: error.commentId,
+        // Stuff a bunch of JSON into the fragment so we can get it back later.
+        // Not intended to be clicked, change the scheme so it doesn't look like a link.
+        target: doc.uri.with({
+          fragment: JSON.stringify(error),
+          scheme: "error",
+        }),
+      },
     };
   });
 }

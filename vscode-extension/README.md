@@ -1,6 +1,6 @@
-# Code Couplet: Comment Pinning
+# [Code Couplet: Comment Pinning](https://marketplace.visualstudio.com/items?itemName=pelmers.code-couplet-vscode)
 
-This VS Code extension provides a quick way to pin comments with code.
+This [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pelmers.code-couplet-vscode) provides a quick way to pin comments with code.
 Once pinned, any change to the comment or code will be checked and a diagnostic error will appear if they are out of sync.
 
 ### Why do this?
@@ -19,14 +19,14 @@ Pinned comments and code are highlighted in the editor and update their committe
 - This will link the entire comment block with every line of the selected code block.
 - This link is saved in a schema file located in a `.code-couplet` folder in the root of your repository.
 - **Do commit** this file!
-  ![Example 1](examples/auto_pin_demo.gif)
+  ![Example 1](https://github.com/pelmers/code-couplet/raw/main/vscode-extension/examples/auto_pin_demo.gif)
 
 ### Manual Pinning
 
 - For more fine-grained control, **select your comment**, then use the command "Code Couplet: Pin Selection"
 - Then, **select your code** and run the same command again
 - This lets you link any text with any other, _even in different files!_
-  ![Example 2](examples/manual_pin_demo.gif)
+  ![Example 2](https://github.com/pelmers/code-couplet/raw/main/vscode-extension/examples/manual_pin_demo.gif)
 
 ### Diagnostics and Fixes
 
@@ -47,4 +47,6 @@ Pinned comments and code are highlighted in the editor and update their committe
 **Known Limitations**
 
 - Auto-pinning only works with single-line commnents, and the comment has to be the whole line
-- If schema files change outside the editor, they will not be noticed until the extension is restarted
+- If you edit source files outside VS Code, the extension will still think things should be on the old positions
+
+Read more details at my blog post: https://pelmers.com/typechecked-comments/

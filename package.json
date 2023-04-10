@@ -26,6 +26,6 @@
   },
   "scripts": {
     "build-extension": "cd vscode-extension && npm run build",
-    "format": "node_modules/.bin/prettier --ignore-path .gitignore --write '.'"
+    "format": "node_modules/.bin/prettier --ignore-path .gitignore --ignore-path .npmignore --write '.'"
   }
 }

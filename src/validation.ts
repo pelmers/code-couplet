@@ -20,12 +20,13 @@ export enum ErrorType {
 }
 
 type ValidationLocation = {
-  uri: URI;
+  uriString: string;
   range: SchemaRange;
 };
 
 export type ValidationError = {
   commentId: number;
+  commentUriString: string;
   // The range matches what is in the schema file
   commentRange: SchemaRange;
   codeLocation: ValidationLocation;
@@ -65,7 +66,7 @@ function convertRangeToSchema(vscodeRange: VscodeRange): SchemaRange {
 /**
  * Validates a source file against a schema.
  * @param contents The contents of the file to validate
- * @param schema the pre-defined comment-code mappings
+ * @param schema the pre-defined comment-code mappings for this doc
  * @returns array of validation errors,
  * note: the length may not match the number of comments in the schema (it only includes errors)
  */
@@ -96,10 +97,11 @@ export async function validate(
 
     const makeError = (errorType: ErrorType, moveFix?: CurrentComment) => ({
       commentId: comment.id,
+      commentUriString: doc.uri.toString(),
       commentRange: comment.commentRange,
       errorType,
       codeLocation: {
-        uri: codeUri,
+        uriString: codeUri.toString(),
         range: comment.codeRange,
       },
       actual: {

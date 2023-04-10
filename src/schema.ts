@@ -182,3 +182,10 @@ export function resolveCodePath(sourceUri: URI, comment: CurrentComment) {
 export function getCodeRelativePath(commentUri: URI, codeUri: URI) {
   return path.relative(commentUri.path, codeUri.path);
 }
+
+export function getSourceRootRelativePath(
+  sourceRootUri: URI,
+  sourceFileUri: URI
+): string {
+  return path.relative(sourceRootUri.path, sourceFileUri.path);
+}
