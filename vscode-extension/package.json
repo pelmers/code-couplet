@@ -2,7 +2,7 @@
   "name": "code-couplet-vscode",
   "displayName": "Code Couplet: Comment Pinning",
   "description": "Typechecker for your comments. Pin your comments to your code and guarantee they stay in sync.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Peter Elmers <peter.elmers@yahoo.com>",
   "publisher": "pelmers",
   "engines": {
@@ -14,7 +14,20 @@
   },
   "icon": "icon.png",
   "categories": [
-    "Other"
+    "Other",
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "docstring",
+    "javadoc",
+    "jsdoc",
+    "tsdoc",
+    "comment",
+    "docs",
+    "documentation",
+    "typecheck",
+    "productivity"
   ],
   "activationEvents": [
     "workspaceContains:.code-couplet/**"
